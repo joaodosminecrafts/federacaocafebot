@@ -29,15 +29,6 @@ client.on('messageCreate', (message) => {
   // Normaliza o texto para minúsculas
   const texto = message.content.toLowerCase();
 
-  if (texto.includes('%ping')) {
-    return message.reply('Pong!');
-  }
-
-  // Responde se o texto contiver qualquer variação da frase
-  if (texto.includes('porcoelindo') || texto.includes('porco e lindo') || texto.includes('porco lindo')) {
-    return message.reply('Verdade!');
-  }
-
   if (texto.includes('%testarboasvindas')) {
     // Verificação de permissão corrigida para a v14
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
