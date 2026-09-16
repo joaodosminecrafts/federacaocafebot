@@ -1,14 +1,22 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { 
+  Client, 
+  GatewayIntentBits, 
+  EmbedBuilder, 
+  PermissionsBitField, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle 
+} = require('discord.js');
 const express = require('express');
 
-// 1. Inicia o servidor web para o Render manter o bot online
+// 1. Servidor Web (Mantém 24/7 no Render)
 const app = express();
 app.get('/', (req, res) => res.send('Bot online 24/7!'));
 app.listen(process.env.PORT || 3000, () => {
   console.log('Servidor Express rodando na porta 3000');
 });
 
-// 2. Configura as intenções do bot
+// 2. Intentions
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,48 +30,103 @@ client.once('ready', () => {
   console.log(`Bot online como ${client.user.tag}!`);
 });
 
-// 3. Comandos do bot
-client.on('messageCreate', (message) => {
+// 3. Comandos de Texto
+client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // Normaliza o texto para minúsculas
-  const texto = message.content.toLowerCase();
+  const texto = message.content.toLowerCase().trim();
 
-  if (texto.includes('%testarboasvindas')) {
-    // Verificação de permissão corrigida para a v14
+  // Comando para enviar o Painel do Ticket no canal
+  if (texto === '%painelticket') {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply('❌ Apenas administradores podem enviar o painel.');
+    }
+
+    // Embed exatamente igual ao da imagem
+    const embedTicket = new EmbedBuilder()
+      .setColor('#543306')
+      .setAuthor({ 
+        name: 'Federação Café ☕🍵', 
+        iconURL: message.guild.iconURL({ dynamic: true }) 
+      })
+      .setTitle('Informações do Ticket')
+      .setDescription(
+        '• Não abra ticket por brincadeiras, isso resultará em uma punição.\n' +
+        '• Apenas abra tickets de inscrição se as vagas estiverem abertas.'
+      )
+      .setImage('https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png') // Substitua pelo link direto da sua imagem/banner
+      .setFooter({ text: 'Made in SPL. ☕🍵' });
+
+    // Botões interativos
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket_duvida')
+        .setLabel('DÚVIDA')
+        .setEmoji('🤔')
+        .setStyle(ButtonStyle.Primary), // Azul
+
+      new ButtonBuilder()
+        .setCustomId('ticket_denuncia')
+        .setLabel('DENÚNCIA')
+        .setEmoji('🎟️')
+        .setStyle(ButtonStyle.Danger), // Vermelho
+
+      new ButtonBuilder()
+        .setCustomId('ticket_parceria')
+        .setLabel('PARCERIA')
+        .setEmoji('🤝')
+        .setStyle(ButtonStyle.Success), // Verde
+
+      new ButtonBuilder()
+        .setCustomId('ticket_inscrever')
+        .setLabel('SE INSCREVER')
+        .setEmoji('✔️')
+        .setStyle(ButtonStyle.Secondary) // Cinza
+        .setDisabled(false) // Mude para true se as vagas estiverem fechadas
+    );
+
+    await message.channel.send({ embeds: [embedTicket], components: [row] });
+    return message.delete().catch(() => {}); // Apaga o %painelticket digitado
+  }
+
+  // Teste de Boas-Vindas
+  if (texto === '%testarboasvindas') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
-
     return client.emit('guildMemberAdd', message.member);
   }
 });
 
-// 4. Sistema de Boas-Vindas
-client.on('guildMemberAdd', async (member) => {
-  console.log(`Membro detectado: ${member.user.tag}`);
+// 4. Resposta aos Botões dos Tickets
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
 
-  const canal = member.guild.channels.cache.get('1463012406740385792');
+  if (interaction.customId.startsWith('ticket_')) {
+    const tipo = interaction.customId.replace('ticket_', '').toUpperCase();
 
-  if (!canal) {
-    console.log('ERRO: Canal não encontrado! Verifique o ID do canal.');
-    return;
+    // Responde apenas para quem clicou
+    await interaction.reply({
+      content: `📌 Você selecionou a opção **${tipo}**. O suporte será notificado em breve!`,
+      ephemeral: true
+    });
   }
+});
+
+// 5. Evento de Boas-Vindas
+client.on('guildMemberAdd', async (member) => {
+  const canal = member.guild.channels.cache.get('1463012406740385792');
+  if (!canal) return;
 
   const embedBoasVindas = new EmbedBuilder()
     .setColor('#543306')
     .setTitle(`Bem-vindo(a) à ${member.guild.name}!`)
     .setDescription(`Olá ${member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setImage('https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&')
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
-  canal.send({ embeds: [embedBoasVindas] }).then(() => {
-    console.log('Embed enviado com sucesso!');
-  }).catch(err => {
-    console.log('Erro ao enviar:', err);
-  });
+  canal.send({ embeds: [embedBoasVindas] }).catch(console.error);
 });
 
 client.login(process.env.TOKEN);
