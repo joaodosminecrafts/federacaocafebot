@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
 // 1. Inicia o servidor web para o Render manter o bot online
@@ -33,14 +33,14 @@ client.on('messageCreate', (message) => {
     return message.reply('Pong!');
   }
 
-  // Verifica se a mensagem contém a palavra, independente de maiúsculas ou espaços
-  if (texto.includes('porcoelindo') || texto.includes('porco e lindo')) {
+  // Responde se o texto contiver qualquer variação da frase
+  if (texto.includes('porcoelindo') || texto.includes('porco e lindo') || texto.includes('porco lindo')) {
     return message.reply('Verdade!');
   }
 
- if (texto.includes('%testarboasvindas')) {
-    // Verifica se quem enviou a mensagem tem permissão de Administrador
-    if (!message.member.permissions.has('Administrator')) {
+  if (texto.includes('%testarboasvindas')) {
+    // Verificação de permissão corrigida para a v14
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
 
