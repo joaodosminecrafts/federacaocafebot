@@ -38,7 +38,12 @@ client.on('messageCreate', (message) => {
     return message.reply('Verdade!');
   }
 
-  if (texto.includes('%testarboasvindas')) {
+ if (texto.includes('%testarboasvindas')) {
+    // Verifica se quem enviou a mensagem tem permissão de Administrador
+    if (!message.member.permissions.has('Administrator')) {
+      return message.reply('❌ Apenas administradores podem usar este comando.');
+    }
+
     return client.emit('guildMemberAdd', message.member);
   }
 });
