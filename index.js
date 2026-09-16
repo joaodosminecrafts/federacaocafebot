@@ -21,7 +21,7 @@ client.on('messageCreate', (message) => {
   }
 
   if (message.content === '%oporcoelindo') {
-    message.reply('essa afirmação é verdadeira!');
+    message.reply('verdade');
   }
 
   
