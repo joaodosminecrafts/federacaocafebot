@@ -54,7 +54,7 @@ client.on('messageCreate', async (message) => {
         '• Não abra ticket por brincadeiras, isso resultará em uma punição.\n' +
         '• Apenas abra tickets de inscrição se as vagas estiverem abertas.'
       )
-      .setImage('https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png')
+      .setImage('https://cdn.discordapp.com/attachments/1526123249677897868/1549580500903927879/xhps1k0.png?ex=6aabdf8d&is=6aaa8e0d&hm=4e1626e69a087634db5835d4113b9f073e1d0c51f9a3885ff5cc2adf236f1d0a&')
       .setFooter({ text: 'Made in SPL. ☕🍵' });
 
     const row = new ActionRowBuilder().addComponents(
