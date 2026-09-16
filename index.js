@@ -16,15 +16,15 @@ client.once('ready', () => {
 client.on('messageCreate', (message) => {
   if (message.author.bot) return;
 
-  // Converte o texto para minúsculas e remove espaços extras
   const texto = message.content.toLowerCase().trim();
 
   if (texto === '%ping') {
     message.reply('Pong!');
   }
 
-  if (texto === '%oporcoelindo') {
-    message.reply('verdade');
+  // Nome do comando ajustado para evitar filtros de palavras do Discord
+  if (texto === '%porcoelindo') {
+    message.reply('Verdade!');
   }
 
   if (texto === '%testarboasvindas') {
