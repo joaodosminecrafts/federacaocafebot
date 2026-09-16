@@ -26,18 +26,20 @@ client.once('ready', () => {
 client.on('messageCreate', (message) => {
   if (message.author.bot) return;
 
-  const texto = message.content.toLowerCase().trim();
+  // Normaliza o texto para minúsculas
+  const texto = message.content.toLowerCase();
 
-  if (texto === '%ping') {
-    message.reply('Pong!');
+  if (texto.includes('%ping')) {
+    return message.reply('Pong!');
   }
 
-  if (texto === '%porcoelindo' || texto === '%oporcoelindo') {
-    message.reply('Verdade!');
+  // Verifica se a mensagem contém a palavra, independente de maiúsculas ou espaços
+  if (texto.includes('porcoelindo') || texto.includes('porco e lindo')) {
+    return message.reply('Verdade!');
   }
 
-  if (texto === '%testarboasvindas') {
-    client.emit('guildMemberAdd', message.member);
+  if (texto.includes('%testarboasvindas')) {
+    return client.emit('guildMemberAdd', message.member);
   }
 });
 
