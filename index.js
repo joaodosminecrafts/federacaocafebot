@@ -128,7 +128,7 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      // Cria o canal estritamente privado
+      // Cria o canal privado com permissão para o usuário + cargo específico
       const canal = await interaction.guild.channels.create({
         name: nomeCanal,
         type: ChannelType.GuildText,
@@ -139,8 +139,18 @@ client.on('interactionCreate', async (interaction) => {
             deny: [PermissionsBitField.Flags.ViewChannel],
           },
           {
-            // Libera o canal APENAS para quem clicou no botão
+            // Libera o canal para quem clicou no botão
             id: interaction.user.id, 
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.ReadMessageHistory
+            ],
+          },
+          {
+            // Libera o canal para o cargo especificado (ID: 1527141858239709234)
+            id: '1527141858239709234',
             allow: [
               PermissionsBitField.Flags.ViewChannel,
               PermissionsBitField.Flags.SendMessages,
