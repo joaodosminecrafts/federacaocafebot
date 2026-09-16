@@ -20,6 +20,12 @@ client.on('messageCreate', (message) => {
     message.reply('Pong!');
   }
 
+  if (message.content === '%oporcoelindo') {
+    message.reply('essa afirmação é verdadeira!');
+  }
+
+  
+
   if (message.content === '%testarboasvindas') {
     client.emit('guildMemberAdd', message.member);
   }
