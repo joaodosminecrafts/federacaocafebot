@@ -37,7 +37,7 @@ client.on('messageCreate', async (message) => {
 
   const texto = message.content.toLowerCase().trim();
 
-  // Enviar o Painel
+  // Enviar o Painel do Ticket
   if (texto === '%painelticket') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem enviar o painel.');
@@ -54,7 +54,7 @@ client.on('messageCreate', async (message) => {
         '• Não abra ticket por brincadeiras, isso resultará em uma punição.\n' +
         '• Apenas abra tickets de inscrição se as vagas estiverem abertas.'
       )
-      .setImage('https://cdn.discordapp.com/attachments/1526123249677897868/1549580500903927879/xhps1k0.png?ex=6aabdf8d&is=6aaa8e0d&hm=4e1626e69a087634db5835d4113b9f073e1d0c51f9a3885ff5cc2adf236f1d0a&')
+      .setImage('https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png')
       .setFooter({ text: 'Made in SPL. ☕🍵' });
 
     const row = new ActionRowBuilder().addComponents(
@@ -108,7 +108,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 4. Criação do Canal ao Clicar no Botão
+// 4. Criação do Canal Privado ao Clicar no Botão
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
@@ -128,31 +128,30 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      // Cria o canal privado
+      // Cria o canal estritamente privado
       const canal = await interaction.guild.channels.create({
         name: nomeCanal,
         type: ChannelType.GuildText,
         permissionOverwrites: [
           {
-            id: interaction.guild.id, // Oculta para todos (@everyone)
+            // Oculta o canal para @everyone
+            id: interaction.guild.roles.everyone.id, 
             deny: [PermissionsBitField.Flags.ViewChannel],
           },
           {
-            id: interaction.user.id, // Dá acesso ao criador do ticket
+            // Libera o canal APENAS para quem clicou no botão
+            id: interaction.user.id, 
             allow: [
               PermissionsBitField.Flags.ViewChannel,
               PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.AttachFiles
+              PermissionsBitField.Flags.AttachFiles,
+              PermissionsBitField.Flags.ReadMessageHistory
             ],
-          },
-          {
-            id: interaction.guild.roles.everyone.id, // Pode ajustar adicionando a permissão do cargo de Staff
-            allow: [],
           }
         ],
       });
 
-      // Botão interno para fechar o canal
+      // Botão para fechar o ticket
       const btnFechar = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('fechar_ticket_canal')
