@@ -37,7 +37,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 4. Sistema de Boas-Vindas
+// 4. Sistema de Boas-Vindas com Imagem e Foto de Perfil
 client.on('guildMemberAdd', async (member) => {
   console.log(`Membro detectado: ${member.user.tag}`);
 
@@ -53,11 +53,12 @@ client.on('guildMemberAdd', async (member) => {
     .setTitle(`Bem-vindo(a) à ${member.guild.name}!`)
     .setDescription(`Olá ${member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setImage('https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aaced3f&is=6aab9bbf&hm=b2585f7b57b9af9bdb49390a2d15bbf43b6b884870092605cf79f2fd0675dd6c&')
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
   canal.send({ embeds: [embedBoasVindas] }).then(() => {
-    console.log('Embed enviado com sucesso!');
+    console.log('Embed de boas-vindas enviado com sucesso!');
   }).catch(err => {
     console.log('Erro ao enviar:', err);
   });
