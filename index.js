@@ -1,16 +1,7 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
-  EmbedBuilder, 
-  PermissionsBitField, 
-  ActionRowBuilder, 
-  ButtonBuilder, 
-  ButtonStyle,
-  ChannelType 
-} = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Servidor Web (Mantém 24/7 no Render)
+// 1. Servidor Web para o Render manter o bot online 24/7
 const app = express();
 app.get('/', (req, res) => res.send('Bot online 24/7!'));
 app.listen(process.env.PORT || 3000, () => {
@@ -31,75 +22,13 @@ client.once('ready', () => {
   console.log(`Bot online como ${client.user.tag}!`);
 });
 
-// 3. Comandos de Texto (Apenas Administradores)
+// 3. Comandos de Texto
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const texto = message.content.toLowerCase().trim();
 
-  // Enviar o Painel do Ticket
-  if (texto === '%painelticket') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('❌ Apenas administradores podem enviar o painel.');
-    }
-
-    const embedTicket = new EmbedBuilder()
-      .setColor('#543306')
-      .setAuthor({ 
-        name: 'Federação Café ☕🍵', 
-        iconURL: message.guild.iconURL({ dynamic: true }) 
-      })
-      .setTitle('Informações do Ticket')
-      .setDescription(
-        '• Não abra ticket por brincadeiras, isso resultará em uma punição.\n' +
-        '• Apenas abra tickets de inscrição se as vagas estiverem abertas.'
-      )
-      .setImage('https://cdn.discordapp.com/attachments/1526123249677897868/1549580500903927879/xhps1k0.png?ex=6aabdf8d&is=6aaa8e0d&hm=4e1626e69a087634db5835d4113b9f073e1d0c51f9a3885ff5cc2adf236f1d0a&')
-      .setFooter({ text: 'Made in SPL. ☕🍵' });
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('ticket_duvida')
-        .setLabel('DÚVIDA')
-        .setEmoji('🤔')
-        .setStyle(ButtonStyle.Primary),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_denuncia')
-        .setLabel('DENÚNCIA')
-        .setEmoji('🎟️')
-        .setStyle(ButtonStyle.Danger),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_parceria')
-        .setLabel('PARCERIA')
-        .setEmoji('🤝')
-        .setStyle(ButtonStyle.Success),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_inscrever')
-        .setLabel('SE INSCREVER')
-        .setEmoji('✔️')
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await message.channel.send({ embeds: [embedTicket], components: [row] });
-    return message.delete().catch(() => {});
-  }
-
-  // Comando para fechar ticket manualmente no canal
-  if (texto === '%fecharticket') {
-    if (!message.channel.name.startsWith('ticket-')) {
-      return message.reply('❌ Este comando só pode ser usado dentro de um canal de ticket.');
-    }
-
-    message.reply('🔒 Este ticket será fechado em 5 segundos...');
-    setTimeout(() => {
-      message.channel.delete().catch(console.error);
-    }, 5000);
-  }
-
-  // Teste de Boas-Vindas
+  // Teste de Boas-Vindas (Apenas Administradores)
   if (texto === '%testarboasvindas') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
@@ -108,97 +37,16 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 4. Criação do Canal Privado ao Clicar no Botão
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId.startsWith('ticket_')) {
-    const tipo = interaction.customId.replace('ticket_', '');
-    const nomeCanal = `ticket-${tipo}-${interaction.user.username}`;
-
-    // Evita abrir múltiplos tickets do mesmo usuário
-    const canalExistente = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === nomeCanal.toLowerCase());
-    if (canalExistente) {
-      return interaction.reply({
-        content: `❌ Você já possui um ticket aberto em ${canalExistente}!`,
-        ephemeral: true
-      });
-    }
-
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-      // Cria o canal privado com permissão para o usuário + cargo específico
-      const canal = await interaction.guild.channels.create({
-        name: nomeCanal,
-        type: ChannelType.GuildText,
-        permissionOverwrites: [
-          {
-            // Oculta o canal para @everyone
-            id: interaction.guild.roles.everyone.id, 
-            deny: [PermissionsBitField.Flags.ViewChannel],
-          },
-          {
-            // Libera o canal para quem clicou no botão
-            id: interaction.user.id, 
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.AttachFiles,
-              PermissionsBitField.Flags.ReadMessageHistory
-            ],
-          },
-          {
-            // Libera o canal para o cargo especificado (ID: 1527141858239709234)
-            id: '1527141858239709234',
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.AttachFiles,
-              PermissionsBitField.Flags.ReadMessageHistory
-            ],
-          }
-        ],
-      });
-
-      // Botão para fechar o ticket
-      const btnFechar = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('fechar_ticket_canal')
-          .setLabel('Fechar Ticket')
-          .setEmoji('🔒')
-          .setStyle(ButtonStyle.Danger)
-      );
-
-      const embedBoasVindasTicket = new EmbedBuilder()
-        .setColor('#543306')
-        .setTitle(`Atendimento - ${tipo.toUpperCase()}`)
-        .setDescription(`Olá ${interaction.user}, bem-vindo ao seu ticket! Descreva o seu assunto em detalhes. Um suporte responderá em breve.`)
-        .setFooter({ text: 'Clique no botão abaixo para fechar o ticket.' });
-
-      await canal.send({ content: `${interaction.user}`, embeds: [embedBoasVindasTicket], components: [btnFechar] });
-
-      await interaction.editReply({ content: `✅ Seu ticket foi criado em ${canal}!` });
-
-    } catch (err) {
-      console.error(err);
-      await interaction.editReply({ content: '❌ Ocorreu um erro ao criar o seu ticket.' });
-    }
-  }
-
-  // Ação do Botão de Fechar dentro do Canal
-  if (interaction.customId === 'fechar_ticket_canal') {
-    await interaction.reply('🔒 Encerrando e deletando este ticket em 5 segundos...');
-    setTimeout(() => {
-      interaction.channel.delete().catch(console.error);
-    }, 5000);
-  }
-});
-
-// 5. Evento de Boas-Vindas
+// 4. Sistema de Boas-Vindas
 client.on('guildMemberAdd', async (member) => {
+  console.log(`Membro detectado: ${member.user.tag}`);
+
   const canal = member.guild.channels.cache.get('1463012406740385792');
-  if (!canal) return;
+
+  if (!canal) {
+    console.log('ERRO: Canal de boas-vindas não encontrado!');
+    return;
+  }
 
   const embedBoasVindas = new EmbedBuilder()
     .setColor('#543306')
@@ -208,7 +56,11 @@ client.on('guildMemberAdd', async (member) => {
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
-  canal.send({ embeds: [embedBoasVindas] }).catch(console.error);
+  canal.send({ embeds: [embedBoasVindas] }).then(() => {
+    console.log('Embed enviado com sucesso!');
+  }).catch(err => {
+    console.log('Erro ao enviar:', err);
+  });
 });
 
 client.login(process.env.TOKEN);
