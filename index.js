@@ -22,7 +22,7 @@ client.once('ready', () => {
   console.log(`Bot online como ${client.user.tag}!`);
 });
 
-// Link da imagem/banner para reutilizar nos embeds
+// Link do banner reutilizável
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
 
 // 3. Comandos de Texto (Apenas Administradores)[cite: 1, 2]
@@ -48,9 +48,9 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 4. Evento de Boas-Vindas (com Embed e Imagem)[cite: 1, 2]
+// 4. Evento de Boas-Vindas[cite: 1, 2]
 client.on('guildMemberAdd', async (member) => {
-  console.log(`Membro entrou: ${member.user.tag}`);
+  console.log(`Membro entrou: ${member.user?.tag || member.user?.username || 'Desconhecido'}`);
 
   const canal = member.guild.channels.cache.get('1463012406740385792');
 
@@ -59,23 +59,26 @@ client.on('guildMemberAdd', async (member) => {
     return;
   }
 
+  const user = member.user || member;
+  const avatar = user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null;
+
   const embedBoasVindas = new EmbedBuilder()
     .setColor('#543306')
     .setTitle(`Bem-vindo(a) à ${member.guild.name}!`)
     .setDescription(`Olá ${member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setThumbnail(avatar)
     .setImage(BANNER_URL)
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
-  canal.send({ embeds: [embedBoasVindas] }).catch(console.error);
+  canal.send({ embeds: [embedBoasVindas] }).catch(err => console.log('Erro ao enviar boas-vindas:', err));
 });
 
-// 5. Evento de Saída (com Embed e Imagem)
+// 5. Evento de Saída de Membros (Corrigido)
 client.on('guildMemberRemove', async (member) => {
-  console.log(`Membro saiu: ${member.user.tag}`);
+  const nomeUsuario = member.user?.username || member.user?.tag || member.displayName || 'Um membro';
+  console.log(`Membro saiu: ${nomeUsuario}`);
 
-  // Altere o ID abaixo caso queira enviar a saída em outro canal[cite: 2]
   const canal = member.guild.channels.cache.get('1463012406740385792');
 
   if (!canal) {
@@ -83,16 +86,21 @@ client.on('guildMemberRemove', async (member) => {
     return;
   }
 
+  const user = member.user || member;
+  const avatar = user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null;
+
   const embedSaida = new EmbedBuilder()
     .setColor('#543306')
     .setTitle(`Até logo...`)
-    .setDescription(`O membro **${member.user.tag}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setDescription(`O membro **${nomeUsuario}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`)
+    .setThumbnail(avatar)
     .setImage(BANNER_URL)
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
-  canal.send({ embeds: [embedSaida] }).catch(console.error);
+  canal.send({ embeds: [embedSaida] })
+    .then(() => console.log('Embed de saída enviado com sucesso!'))
+    .catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
 
 client.login(process.env.TOKEN);
