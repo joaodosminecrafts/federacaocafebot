@@ -74,15 +74,16 @@ client.on('guildMemberAdd', async (member) => {
   canal.send({ embeds: [embedBoasVindas] }).catch(err => console.log('Erro ao enviar boas-vindas:', err));
 });
 
-// 5. Evento de Saída de Membros (Corrigido)
+// 5. Evento de Saída de Membros (Encaminhado para o canal de saída)[cite: 2]
 client.on('guildMemberRemove', async (member) => {
   const nomeUsuario = member.user?.username || member.user?.tag || member.displayName || 'Um membro';
   console.log(`Membro saiu: ${nomeUsuario}`);
 
-  const canal = member.guild.channels.cache.get('1463012406740385792');
+  // ID do canal de saída configurado
+  const canal = member.guild.channels.cache.get('1463011554814595153');
 
   if (!canal) {
-    console.log('ERRO: Canal de saída não encontrado!');
+    console.log('ERRO: Canal de saída (1463011554814595153) não encontrado!');
     return;
   }
 
@@ -99,7 +100,7 @@ client.on('guildMemberRemove', async (member) => {
     .setTimestamp();
 
   canal.send({ embeds: [embedSaida] })
-    .then(() => console.log('Embed de saída enviado com sucesso!'))
+    .then(() => console.log('Embed de saída enviado com sucesso para o canal de saída!'))
     .catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
 
