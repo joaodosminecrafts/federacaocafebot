@@ -25,7 +25,7 @@ client.once('ready', () => {
 // Configurações de IDs dos Canais
 const ID_CANAL_BOASVINDAS = '1463012406740385792';
 const ID_CANAL_SAIDA = '1463011554814595153';
-const ID_CANAL_JOGOS = '1463012406740385792'; // ⚠️ Altere para o ID do canal de partidas/jogos!
+const ID_CANAL_JOGOS = '1463012406740385792'; // ⚠️ Altera para o ID do teu canal de jogos!
 
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
 
@@ -35,8 +35,8 @@ client.on('messageCreate', async (message) => {
 
   const texto = message.content.trim();
 
-  // --- COMANDO DE NOTIFICAÇÃO DE JOGO (MODO TESTE - SEM @EVERYONE) ---
-  // Sintaxe: %notificarjogo Confronto | Nick Roblox | Link Roblox | Temporada/Info
+  // --- COMANDO DE NOTIFICAÇÃO DE JOGO (FORMATO DA IMAGEM) ---
+  // Sintaxe: %notificarjogo [Emoji Temporada] | [Confronto] | [Nick Roblox] | [Link Roblox]
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
@@ -45,38 +45,34 @@ client.on('messageCreate', async (message) => {
     const conteudo = texto.slice(14).trim();
     const argumentos = conteudo.split('|').map(arg => arg.trim());
 
-    if (argumentos.length < 3) {
+    if (argumentos.length < 4) {
       return message.reply(
-        '❌ **Formato incorreto!** Use o comando assim:\n' +
-        '`%notificarjogo [Confronto com Emojis] | [Nick Roblox] | [Link] | [Temporada/Info]`\n\n' +
+        '❌ **Formato incorreto!** Usa o comando assim:\n' +
+        '`%notificarjogo [Emoji Temporada] | [Confronto com Emojis] | [Nick Roblox] | [Link Roblox]`\n\n' +
         '**Exemplo:**\n' +
-        '`%notificarjogo ☕ Café FC 🆚 ⚡ Rayo FC | jogador_roblox123 | https://roblox.com/share?code=123 | 🏆 Temporada 2`'
+        '`%notificarjogo :season3: | 🇪🇨 Equador VS 🇵🇹 Portugal | perdiminhacontano | https://roblox.com/share?code=123`'
       );
     }
 
-    const [confronto, nickRoblox, linkRoblox, temporadaInfo] = argumentos;
+    const [emojiSeason, confronto, nickRoblox, linkRoblox] = argumentos;
     const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
 
     if (!canalJogos) {
-      return message.reply('❌ Canal de jogos não encontrado! Verifique o ID no código.');
+      return message.reply('❌ Canal de jogos não encontrado! Verifica o ID no código.');
     }
 
-    // Mensagem sem @everyone para modo de teste
-    let mensagemJogo = `📢 **NOVA PARTIDA CONFIRMADA!** 📢\n\n` +
-      `⚽ **CONFRONTO:** ${confronto}\n` +
-      `👤 **NICK NO ROBLOX:** \`${nickRoblox}\`\n` +
-      `🔗 **LINK DO SERVIDOR:** ${linkRoblox}\n`;
-
-    if (temporadaInfo) {
-      mensagemJogo += `📌 **INFORMAÇÕES:** ${temporadaInfo}\n`;
-    }
+    // Estrutura idêntica à imagem enviada
+    const mensagemJogo = `${emojiSeason} | ${confronto}\n\n` +
+      `**Server Aberto!**\n` +
+      `Nick: \`${nickRoblox}\`\n` +
+      `Link: ${linkRoblox}`;
 
     await canalJogos.send({ 
       content: mensagemJogo,
-      allowedMentions: { parse: [] } // Impede menções acidentais
+      allowedMentions: { parse: [] } // Evita marcações indevidas durante testes
     });
 
-    await message.reply('✅ Mensagem de teste de jogo enviada com sucesso (sem mencionar ninguém)!');
+    await message.reply('✅ Notificação de jogo enviada com sucesso!');
     return;
   }
 
