@@ -1,14 +1,14 @@
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Servidor Web para o Render manter o bot online 24/7
+// 1. Servidor Web para manter o bot online 24/7 no Render[cite: 1, 2]
 const app = express();
 app.get('/', (req, res) => res.send('Bot online 24/7!'));
 app.listen(process.env.PORT || 3000, () => {
   console.log('Servidor Express rodando na porta 3000');
 });
 
-// 2. Intenções do Bot
+// 2. Intenções do Bot[cite: 1, 2]
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,24 +22,35 @@ client.once('ready', () => {
   console.log(`Bot online como ${client.user.tag}!`);
 });
 
-// 3. Comandos de Texto
+// Link da imagem/banner para reutilizar nos embeds
+const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
+
+// 3. Comandos de Texto (Apenas Administradores)[cite: 1, 2]
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const texto = message.content.toLowerCase().trim();
 
-  // Teste de Boas-Vindas (Apenas Administradores)
+  // Teste de Boas-Vindas[cite: 1, 2]
   if (texto === '%testarboasvindas') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
     return client.emit('guildMemberAdd', message.member);
   }
+
+  // Teste de Saída
+  if (texto === '%testarsaida') {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply('❌ Apenas administradores podem usar este comando.');
+    }
+    return client.emit('guildMemberRemove', message.member);
+  }
 });
 
-// 4. Sistema de Boas-Vindas com Imagem e Foto de Perfil
+// 4. Evento de Boas-Vindas (com Embed e Imagem)[cite: 1, 2]
 client.on('guildMemberAdd', async (member) => {
-  console.log(`Membro detectado: ${member.user.tag}`);
+  console.log(`Membro entrou: ${member.user.tag}`);
 
   const canal = member.guild.channels.cache.get('1463012406740385792');
 
@@ -53,15 +64,35 @@ client.on('guildMemberAdd', async (member) => {
     .setTitle(`Bem-vindo(a) à ${member.guild.name}!`)
     .setDescription(`Olá ${member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setImage('https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aaced3f&is=6aab9bbf&hm=b2585f7b57b9af9bdb49390a2d15bbf43b6b884870092605cf79f2fd0675dd6c&')
+    .setImage(BANNER_URL)
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
-  canal.send({ embeds: [embedBoasVindas] }).then(() => {
-    console.log('Embed de boas-vindas enviado com sucesso!');
-  }).catch(err => {
-    console.log('Erro ao enviar:', err);
-  });
+  canal.send({ embeds: [embedBoasVindas] }).catch(console.error);
+});
+
+// 5. Evento de Saída (com Embed e Imagem)
+client.on('guildMemberRemove', async (member) => {
+  console.log(`Membro saiu: ${member.user.tag}`);
+
+  // Altere o ID abaixo caso queira enviar a saída em outro canal[cite: 2]
+  const canal = member.guild.channels.cache.get('1463012406740385792');
+
+  if (!canal) {
+    console.log('ERRO: Canal de saída não encontrado!');
+    return;
+  }
+
+  const embedSaida = new EmbedBuilder()
+    .setColor('#543306')
+    .setTitle(`Até logo...`)
+    .setDescription(`O membro **${member.user.tag}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`)
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setImage(BANNER_URL)
+    .setFooter({ text: 'Made in SPL. ☕' })
+    .setTimestamp();
+
+  canal.send({ embeds: [embedSaida] }).catch(console.error);
 });
 
 client.login(process.env.TOKEN);
