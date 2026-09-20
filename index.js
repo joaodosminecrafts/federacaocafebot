@@ -26,7 +26,7 @@ client.once('ready', () => {
 const ID_CANAL_BOASVINDAS = '1463012406740385792';
 const ID_CANAL_SAIDA = '1463011554814595153';
 const ID_CANAL_JOGOS = '1463018033651122176';
-
+const SAIDA_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1551060198628659210/9dqvkhb.png?ex=6ab098e0&is=6aaf4760&hm=219528b56891f966feff9e9a366ee043cf0b24533077ab4a8e86f9da735c6866&'
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
 
 // 3. Comandos de Texto (Apenas Administradores)
@@ -134,7 +134,7 @@ client.on('guildMemberRemove', async (member) => {
     title: `Até logo...`,
     description: `O membro **${nomeUsuario}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`,
     thumbnail: { url: avatar },
-    image: { url: BANNER_URL },
+    image: { url: SAIDA_URL },
     footer: { text: 'Made in SPL. ☕' },
     timestamp: new Date()
   };
