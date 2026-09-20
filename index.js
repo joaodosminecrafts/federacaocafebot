@@ -36,7 +36,7 @@ client.on('messageCreate', async (message) => {
   const texto = message.content.trim();
 
   // --- COMANDO DE NOTIFICAÇÃO DE JOGO ---
-  // Uso: %notificarjogo [EmojiTime1] [EmojiTime2] [NickRoblox] [LinkRoblox]
+  // Uso: %notificarjogo [EmojiSeason] [EmojiTime1] [EmojiTime2] [NickRoblox] [LinkRoblox]
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
@@ -45,19 +45,20 @@ client.on('messageCreate', async (message) => {
     const conteudo = texto.slice(14).trim();
     const partes = conteudo.split(/\s+/);
 
-    if (partes.length < 4) {
+    if (partes.length < 5) {
       return message.reply(
-        '❌ **Formato incorreto!** Digite na ordem:\n' +
-        '`%notificarjogo [Emoji1] [Emoji2] [NickRoblox] [Link]`\n\n' +
+        '❌ **Formato incorreto!** Digite exatamente nesta ordem:\n' +
+        '`%notificarjogo [EmojiSeason] [EmojiTime1] [EmojiTime2] [NickRoblox] [Link]`\n\n' +
         '**Exemplo:**\n' +
-        '`%notificarjogo :equador: :portugal: perdiminhacontano https://roblox.com/share?code=123`'
+        '`%notificarjogo :season3: :equador: :portugal: perdiminhacontano https://roblox.com/share?code=123`'
       );
     }
 
-    const emojiTime1 = partes[0];
-    const emojiTime2 = partes[1];
-    const nickRoblox = partes[2];
-    const linkRoblox = partes[3];
+    const emojiSeason = partes[0];
+    const emojiTime1 = partes[1];
+    const emojiTime2 = partes[2];
+    const nickRoblox = partes[3];
+    const linkRoblox = partes[4];
 
     const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
 
@@ -65,8 +66,8 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Canal de jogos não encontrado!');
     }
 
-    // Mensagem formatada com :season3: fixo e ||@here|| oculto na última linha
-    const mensagemJogo = `# :season3: | ${emojiTime1} VS ${emojiTime2}\n\n` +
+    // Monta a estrutura com o emoji exato enviado na mensagem do usuario
+    const mensagemJogo = `# ${emojiSeason} | ${emojiTime1} VS ${emojiTime2}\n\n` +
       `**Server Aberto!**\n` +
       `Nick: \`${nickRoblox}\`\n` +
       `Link: ${linkRoblox}\n\n` +
@@ -77,7 +78,7 @@ client.on('messageCreate', async (message) => {
       allowedMentions: { parse: ['everyone'] } // Permite o spoiler do @here funcionar
     });
 
-    await message.reply('✅ Notificação enviada com sucesso!');
+    await message.reply('✅ Notificação enviada com sucesso para o canal!');
     return;
   }
 
