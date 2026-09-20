@@ -24,7 +24,7 @@ client.once('ready', () => {
 
 // Link do banner reutilizável
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
-
+const SAIDA_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1551060198628659210/9dqvkhb.png?ex=6ab098e0&is=6aaf4760&hm=219528b56891f966feff9e9a366ee043cf0b24533077ab4a8e86f9da735c6866&'
 // 3. Comandos de Texto (Apenas Administradores)[cite: 1, 2]
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
@@ -95,7 +95,7 @@ client.on('guildMemberRemove', async (member) => {
     .setTitle(`Até logo...`)
     .setDescription(`O membro **${nomeUsuario}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`)
     .setThumbnail(avatar)
-    .setImage(BANNER_URL)
+    .setImage(SAIDA_URL)
     .setFooter({ text: 'Made in SPL. ☕' })
     .setTimestamp();
 
