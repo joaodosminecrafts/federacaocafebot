@@ -35,7 +35,7 @@ client.on('messageCreate', async (message) => {
 
   const texto = message.content.trim();
 
-  // --- COMANDO DE NOTIFICAÇÃO DE JOGO COMPACTO ---
+  // --- COMANDO DE NOTIFICAÇÃO DE JOGO ---
   // Uso: %notificarjogo [EmojiTime1] [EmojiTime2] [NickRoblox] [LinkRoblox]
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -65,15 +65,16 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Canal de jogos não encontrado!');
     }
 
-    // Mensagem formatada com link completo exposto
+    // Mensagem formatada com :season3: fixo e ||@here|| oculto na última linha
     const mensagemJogo = `# :season3: | ${emojiTime1} VS ${emojiTime2}\n\n` +
       `**Server Aberto!**\n` +
       `Nick: \`${nickRoblox}\`\n` +
-      `Link: ${linkRoblox}`;
+      `Link: ${linkRoblox}\n\n` +
+      `||@here||`;
 
     await canalJogos.send({ 
       content: mensagemJogo,
-      allowedMentions: { parse: [] }
+      allowedMentions: { parse: ['everyone'] } // Permite o spoiler do @here funcionar
     });
 
     await message.reply('✅ Notificação enviada com sucesso!');
