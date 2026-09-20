@@ -1,14 +1,14 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Servidor Web para manter o bot online 24/7 no Render[cite: 1, 2]
+// 1. Servidor Web para manter o bot online 24/7 no Render
 const app = express();
 app.get('/', (req, res) => res.send('Bot online 24/7!'));
 app.listen(process.env.PORT || 3000, () => {
   console.log('Servidor Express rodando na porta 3000');
 });
 
-// 2. Intenções do Bot[cite: 1, 2]
+// 2. Intenções do Bot
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,17 +22,66 @@ client.once('ready', () => {
   console.log(`Bot online como ${client.user.tag}!`);
 });
 
-// Link do banner reutilizável
+// Configurações de IDs dos Canais
+const ID_CANAL_BOASVINDAS = '1463012406740385792';
+const ID_CANAL_SAIDA = '1463011554814595153';
+const ID_CANAL_JOGOS = '1463012406740385792'; // ⚠️ Altere para o ID do canal de partidas/jogos!
+
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
-const SAIDA_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1551060198628659210/9dqvkhb.png?ex=6ab098e0&is=6aaf4760&hm=219528b56891f966feff9e9a366ee043cf0b24533077ab4a8e86f9da735c6866&'
-// 3. Comandos de Texto (Apenas Administradores)[cite: 1, 2]
+
+// 3. Comandos de Texto (Apenas Administradores)
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  const texto = message.content.toLowerCase().trim();
+  const texto = message.content.trim();
 
-  // Teste de Boas-Vindas[cite: 1, 2]
-  if (texto === '%testarboasvindas') {
+  // --- COMANDO DE NOTIFICAÇÃO DE JOGO (MODO TESTE - SEM @EVERYONE) ---
+  // Sintaxe: %notificarjogo Confronto | Nick Roblox | Link Roblox | Temporada/Info
+  if (texto.toLowerCase().startsWith('%notificarjogo')) {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply('❌ Apenas administradores podem usar este comando.');
+    }
+
+    const conteudo = texto.slice(14).trim();
+    const argumentos = conteudo.split('|').map(arg => arg.trim());
+
+    if (argumentos.length < 3) {
+      return message.reply(
+        '❌ **Formato incorreto!** Use o comando assim:\n' +
+        '`%notificarjogo [Confronto com Emojis] | [Nick Roblox] | [Link] | [Temporada/Info]`\n\n' +
+        '**Exemplo:**\n' +
+        '`%notificarjogo ☕ Café FC 🆚 ⚡ Rayo FC | jogador_roblox123 | https://roblox.com/share?code=123 | 🏆 Temporada 2`'
+      );
+    }
+
+    const [confronto, nickRoblox, linkRoblox, temporadaInfo] = argumentos;
+    const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
+
+    if (!canalJogos) {
+      return message.reply('❌ Canal de jogos não encontrado! Verifique o ID no código.');
+    }
+
+    // Mensagem sem @everyone para modo de teste
+    let mensagemJogo = `📢 **NOVA PARTIDA CONFIRMADA!** 📢\n\n` +
+      `⚽ **CONFRONTO:** ${confronto}\n` +
+      `👤 **NICK NO ROBLOX:** \`${nickRoblox}\`\n` +
+      `🔗 **LINK DO SERVIDOR:** ${linkRoblox}\n`;
+
+    if (temporadaInfo) {
+      mensagemJogo += `📌 **INFORMAÇÕES:** ${temporadaInfo}\n`;
+    }
+
+    await canalJogos.send({ 
+      content: mensagemJogo,
+      allowedMentions: { parse: [] } // Impede menções acidentais
+    });
+
+    await message.reply('✅ Mensagem de teste de jogo enviada com sucesso (sem mencionar ninguém)!');
+    return;
+  }
+
+  // Teste de Boas-Vindas
+  if (texto.toLowerCase() === '%testarboasvindas') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
@@ -40,7 +89,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // Teste de Saída
-  if (texto === '%testarsaida') {
+  if (texto.toLowerCase() === '%testarsaida') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
@@ -48,60 +97,47 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 4. Evento de Boas-Vindas[cite: 1, 2]
+// 4. Evento de Boas-Vindas (Embed)
 client.on('guildMemberAdd', async (member) => {
-  console.log(`Membro entrou: ${member.user?.tag || member.user?.username || 'Desconhecido'}`);
-
-  const canal = member.guild.channels.cache.get('1463012406740385792');
-
-  if (!canal) {
-    console.log('ERRO: Canal de boas-vindas não encontrado!');
-    return;
-  }
+  const canal = member.guild.channels.cache.get(ID_CANAL_BOASVINDAS);
+  if (!canal) return;
 
   const user = member.user || member;
   const avatar = user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null;
 
-  const embedBoasVindas = new EmbedBuilder()
-    .setColor('#543306')
-    .setTitle(`Bem-vindo(a) à ${member.guild.name}!`)
-    .setDescription(`Olá ${member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`)
-    .setThumbnail(avatar)
-    .setImage(BANNER_URL)
-    .setFooter({ text: 'Made in SPL. ☕' })
-    .setTimestamp();
+  const embedBoasVindas = {
+    color: 0x543306,
+    title: `Bem-vindo(a) à ${member.guild.name}!`,
+    description: `Olá ${member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`,
+    thumbnail: { url: avatar },
+    image: { url: BANNER_URL },
+    footer: { text: 'Made in SPL. ☕' },
+    timestamp: new Date()
+  };
 
   canal.send({ embeds: [embedBoasVindas] }).catch(err => console.log('Erro ao enviar boas-vindas:', err));
 });
 
-// 5. Evento de Saída de Membros (Encaminhado para o canal de saída)[cite: 2]
+// 5. Evento de Saída (Embed)
 client.on('guildMemberRemove', async (member) => {
   const nomeUsuario = member.user?.username || member.user?.tag || member.displayName || 'Um membro';
-  console.log(`Membro saiu: ${nomeUsuario}`);
-
-  // ID do canal de saída configurado
-  const canal = member.guild.channels.cache.get('1463011554814595153');
-
-  if (!canal) {
-    console.log('ERRO: Canal de saída (1463011554814595153) não encontrado!');
-    return;
-  }
+  const canal = member.guild.channels.cache.get(ID_CANAL_SAIDA);
+  if (!canal) return;
 
   const user = member.user || member;
   const avatar = user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null;
 
-  const embedSaida = new EmbedBuilder()
-    .setColor('#543306')
-    .setTitle(`Até logo...`)
-    .setDescription(`O membro **${nomeUsuario}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`)
-    .setThumbnail(avatar)
-    .setImage(SAIDA_URL)
-    .setFooter({ text: 'Made in SPL. ☕' })
-    .setTimestamp();
+  const embedSaida = {
+    color: 0x543306,
+    title: `Até logo...`,
+    description: `O membro **${nomeUsuario}** saiu da ${member.guild.name}. Sentiremos a sua falta! ☕`,
+    thumbnail: { url: avatar },
+    image: { url: BANNER_URL },
+    footer: { text: 'Made in SPL. ☕' },
+    timestamp: new Date()
+  };
 
-  canal.send({ embeds: [embedSaida] })
-    .then(() => console.log('Embed de saída enviado com sucesso para o canal de saída!'))
-    .catch(err => console.log('Erro ao enviar mensagem de saída:', err));
+  canal.send({ embeds: [embedSaida] }).catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
 
 client.login(process.env.TOKEN);
