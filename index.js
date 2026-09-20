@@ -65,11 +65,11 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Canal de jogos não encontrado!');
     }
 
-    // Mensagem formatada exatamente com o link azul e título em #
+    // Mensagem formatada com link completo exposto
     const mensagemJogo = `# :season3: | ${emojiTime1} VS ${emojiTime2}\n\n` +
       `**Server Aberto!**\n` +
       `Nick: \`${nickRoblox}\`\n` +
-      `[Link](${linkRoblox})`;
+      `Link: ${linkRoblox}`;
 
     await canalJogos.send({ 
       content: mensagemJogo,
