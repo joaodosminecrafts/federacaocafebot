@@ -31,7 +31,7 @@ const ID_CANAL_JOGOS = '1463018033651122176';
 const SAIDA_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1551060198628659210/9dqvkhb.png?ex=6ab098e0&is=6aaf4760&hm=219528b56891f966feff9e9a366ee043cf0b24533077ab4a8e86f9da735c6866&';
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
 
-// 3. Comandos de Texto (Apenas Administradores)
+// 3. Comandos de Texto
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
@@ -39,8 +39,8 @@ client.on('messageCreate', async (message) => {
 
   // --- COMANDO DE NOTIFICAÇÃO DE JOGO ---
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('❌ Apenas administradores podem usar este comando.');
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+      return message.reply('❌ Apenas administradores ou gestores podem usar este comando.');
     }
 
     const conteudo = texto.slice(14).trim();
@@ -64,7 +64,7 @@ client.on('messageCreate', async (message) => {
     const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
 
     if (!canalJogos) {
-      return message.reply('❌ Canal de jogos não encontrado!');
+      return message.reply(`❌ Canal de jogos com ID \`${ID_CANAL_JOGOS}\` não foi encontrado neste servidor!`);
     }
 
     const mensagemJogo = `# ${emojiSeason} | ${emojiTime1} VS ${emojiTime2}\n\n` +
@@ -82,24 +82,56 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Teste de Boas-Vindas
+  // --- COMANDO DE TESTE DE BOAS-VINDAS ---
   if (texto.toLowerCase() === '%testarboasvindas') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('❌ Apenas administradores podem usar este comando.');
+    const canal = message.guild.channels.cache.get(ID_CANAL_BOASVINDAS);
+    if (!canal) {
+      return message.reply(`❌ Canal de Boas-Vindas (\`${ID_CANAL_BOASVINDAS}\`) não encontrado!`);
     }
-    return client.emit('guildMemberAdd', message.member);
+
+    const user = message.author;
+    const avatar = user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null;
+
+    const embedBoasVindas = {
+      color: 0x543306,
+      title: `Bem-vindo(a) à ${message.guild.name}!`,
+      description: `Olá ${message.member}, seja muito bem-vindo(a) à Federação Café! Se verifique em <#1526091101138718740>.`,
+      thumbnail: { url: avatar },
+      image: { url: BANNER_URL },
+      footer: { text: 'Made in SPL. ☕' },
+      timestamp: new Date()
+    };
+
+    await canal.send({ embeds: [embedBoasVindas] });
+    return message.reply('✅ Teste de Boas-Vindas enviado no canal configurado!');
   }
 
-  // Teste de Saída
+  // --- COMANDO DE TESTE DE SAÍDA ---
   if (texto.toLowerCase() === '%testarsaida') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('❌ Apenas administradores podem usar este comando.');
+    const canal = message.guild.channels.cache.get(ID_CANAL_SAIDA);
+    if (!canal) {
+      return message.reply(`❌ Canal de Saída (\`${ID_CANAL_SAIDA}\`) não encontrado!`);
     }
-    return client.emit('guildMemberRemove', message.member);
+
+    const user = message.author;
+    const avatar = user.displayAvatarURL ? user.displayAvatarURL({ dynamic: true }) : null;
+
+    const embedSaida = {
+      color: 0x543306,
+      title: `Até logo...`,
+      description: `O membro **${user.username}** saiu da ${message.guild.name}. Sentiremos a sua falta! ☕`,
+      thumbnail: { url: avatar },
+      image: { url: SAIDA_URL },
+      footer: { text: 'Made in SPL. ☕' },
+      timestamp: new Date()
+    };
+
+    await canal.send({ embeds: [embedSaida] });
+    return message.reply('✅ Teste de Saída enviado no canal configurado!');
   }
 });
 
-// 4. Evento de Boas-Vindas
+// 4. Evento Real de Boas-Vindas
 client.on('guildMemberAdd', async (member) => {
   const canal = member.guild.channels.cache.get(ID_CANAL_BOASVINDAS);
   if (!canal) return;
@@ -120,7 +152,7 @@ client.on('guildMemberAdd', async (member) => {
   canal.send({ embeds: [embedBoasVindas] }).catch(err => console.log('Erro ao enviar boas-vindas:', err));
 });
 
-// 5. Evento de Saída
+// 5. Evento Real de Saída
 client.on('guildMemberRemove', async (member) => {
   const nomeUsuario = member.user?.username || member.user?.tag || member.displayName || 'Um membro';
   const canal = member.guild.channels.cache.get(ID_CANAL_SAIDA);
