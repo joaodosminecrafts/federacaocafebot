@@ -80,5 +80,14 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+// Substitua as duas últimas linhas do seu index.js por isto:
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
-if (token) client.login(token);
+
+if (!token) {
+  console.error('[ERRO CRÍTICO] A variável TOKEN não foi encontrada no Render!');
+} else {
+  console.log('[Discord] Tentando autenticar com o token...');
+  client.login(token).catch((err) => {
+    console.error('[Erro no Login do Discord]:', err.message);
+  });
+}
