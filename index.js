@@ -19,14 +19,14 @@ const client = new Client({
 });
 
 client.once('ready', () => {
-  console.log(`Bot online como ${client.user.tag}!`);
+  console.log(`✅ Bot online como ${client.user.tag}!`);
 });
 
 // Configurações de IDs dos Canais
 const ID_CANAL_BOASVINDAS = '1463012406740385792';
 const ID_CANAL_SAIDA = '1463011554814595153';
 const ID_CANAL_JOGOS = '1463018033651122176';
-const SAIDA_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1551060198628659210/9dqvkhb.png?ex=6ab098e0&is=6aaf4760&hm=219528b56891f966feff9e9a366ee043cf0b24533077ab4a8e86f9da735c6866&'
+const SAIDA_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1551060198628659210/9dqvkhb.png?ex=6ab098e0&is=6aaf4760&hm=219528b56891f966feff9e9a366ee043cf0b24533077ab4a8e86f9da735c6866&';
 const BANNER_URL = 'https://cdn.discordapp.com/attachments/1463018824461979763/1549870083960995871/3jw0xq8.png?ex=6aac447f&is=6aaaf2ff&hm=cdc1ee6493ee4b833f755b071b44692ca05839142d2667be8ec8a6fb5a5e3448&';
 
 // 3. Comandos de Texto (Apenas Administradores)
@@ -142,4 +142,17 @@ client.on('guildMemberRemove', async (member) => {
   canal.send({ embeds: [embedSaida] }).catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
 
-client.login(process.env.TOKEN);
+// 6. Autenticação e Diagnóstico
+console.log('Iniciando tentativa de conexão com o Discord...');
+
+if (!process.env.TOKEN) {
+  console.error('❌ ERRO CRÍTICO: A variável de ambiente TOKEN não está configurada no Render!');
+} else {
+  client.login(process.env.TOKEN)
+    .then(() => {
+      console.log('✅ Autenticação realizada com sucesso no Discord!');
+    })
+    .catch((err) => {
+      console.error('❌ ERRO AO FAZER LOGIN NO DISCORD:', err.message);
+    });
+}
