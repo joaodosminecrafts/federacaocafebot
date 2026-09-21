@@ -1,11 +1,13 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Servidor Web para manter o bot online 24/7 no Render
+// 1. Servidor Web para manter o bot online 24/7 no Render (Porta dinâmica)
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.get('/', (req, res) => res.send('Bot online 24/7!'));
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Servidor Express rodando na porta 3000');
+app.listen(PORT, () => {
+  console.log(`Servidor Express rodando na porta ${PORT}`);
 });
 
 // 2. Intenções do Bot
