@@ -6,7 +6,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  rest: {
+    timeout: 15000
+  }
 });
 
 const app = express();
@@ -19,13 +22,11 @@ client.once('ready', () => {
   console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
 });
 
-// ID do Canal fornecido
 const ID_CANAL_JOGOS = '1463018033651122176';
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // Log no Render para confirmar se o bot está lendo as mensagens
   console.log(`[Mensagem Recebida] de ${message.author.tag}: "${message.content}"`);
 
   const texto = message.content.trim();
@@ -33,7 +34,6 @@ client.on('messageCreate', async (message) => {
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
     console.log('[Comando Detectado] Executando %notificarjogo...');
 
-    // Validação de permissão
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
       console.log('[Erro] Usuário sem permissão.');
@@ -53,7 +53,6 @@ client.on('messageCreate', async (message) => {
       );
     }
 
-    // Busca o canal pelo ID
     const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
     if (!canalJogos) {
       console.log(`[Erro] Canal ${ID_CANAL_JOGOS} não encontrado no servidor.`);
@@ -80,14 +79,22 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Substitua as duas últimas linhas do seu index.js por isto:
-const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+// Função para iniciar a autenticação
+async function iniciarBot() {
+  const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
-if (!token) {
-  console.error('[ERRO CRÍTICO] A variável TOKEN não foi encontrada no Render!');
-} else {
+  if (!token) {
+    console.error('[ERRO CRÍTICO] A variável TOKEN não foi encontrada no Render!');
+    return;
+  }
+
   console.log('[Discord] Tentando autenticar com o token...');
-  client.login(token).catch((err) => {
+  try {
+    await client.login(token);
+  } catch (err) {
     console.error('[Erro no Login do Discord]:', err.message);
-  });
+  }
 }
+
+// EXECUÇÃO OBRIGATÓRIA DA FUNÇÃO
+iniciarBot();
