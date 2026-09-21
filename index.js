@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Instância do Bot
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -10,32 +9,34 @@ const client = new Client({
   ]
 });
 
-// 2. Servidor Web Express (Render)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => res.send('Bot de Notificação Online!'));
-app.listen(PORT, () => {
-  console.log(`[Express] Servidor Web ativo na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// 3. Eventos do Discord
 client.once('ready', () => {
-  console.log(`[Discord] ✅ SUCCESS: Bot online e autenticado como: ${client.user.tag}`);
+  console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
 });
 
-// ID do Canal onde a notificação será enviada
+// ID do Canal fornecido
 const ID_CANAL_JOGOS = '1463018033651122176';
 
-// 4. Comando %notificarjogo
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  // Log no Render para confirmar se o bot está lendo as mensagens
+  console.log(`[Mensagem Recebida] de ${message.author.tag}: "${message.content}"`);
 
   const texto = message.content.trim();
 
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
+    console.log('[Comando Detectado] Executando %notificarjogo...');
+
+    // Validação de permissão
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+      console.log('[Erro] Usuário sem permissão.');
       return message.reply('❌ Precisa de ter permissão de Administrador ou Gerir Servidor.');
     }
 
@@ -43,6 +44,7 @@ client.on('messageCreate', async (message) => {
     const partes = conteudo.split(/\s+/);
 
     if (partes.length < 5) {
+      console.log('[Erro] Argumentos insuficientes.');
       return message.reply(
         '❌ **Formato incorreto!** Use o formato:\n' +
         '`%notificarjogo [EmojiSeason] [EmojiTime1] [EmojiTime2] [NickRoblox] [Link]`\n\n' +
@@ -51,8 +53,10 @@ client.on('messageCreate', async (message) => {
       );
     }
 
+    // Busca o canal pelo ID
     const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
     if (!canalJogos) {
+      console.log(`[Erro] Canal ${ID_CANAL_JOGOS} não encontrado no servidor.`);
       return message.reply(`❌ Canal de jogos (\`${ID_CANAL_JOGOS}\`) não foi encontrado neste servidor!`);
     }
 
@@ -67,31 +71,14 @@ client.on('messageCreate', async (message) => {
         content: mensagemJogo,
         allowedMentions: { parse: ['everyone'] }
       });
+      console.log('[Sucesso] Notificação enviada para o canal!');
       return message.reply('✅ Notificação enviada com sucesso para o canal!');
     } catch (err) {
+      console.error('[Erro Discord API]', err.message);
       return message.reply(`❌ Erro ao enviar mensagem no canal: \`${err.message}\``);
     }
   }
 });
 
-// 5. Início com Captura Total de Erros
-async function iniciarBot() {
-  const tokenBruto = process.env.TOKEN;
-
-  if (!tokenBruto) {
-    console.error('[ERRO CRÍTICO] A variável TOKEN não está cadastrada no Render.');
-    return;
-  }
-
-  const token = tokenBruto.trim();
-  console.log(`[Discord] Testando token (tamanho: ${token.length} caracteres)...`);
-
-  try {
-    await client.login(token);
-  } catch (error) {
-    console.error('[Discord] ❌ FALHA NA AUTENTICAÇÃO!');
-    console.error(`Detalhes: ${error.message}`);
-  }
-}
-
-iniciarBot();
+const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+if (token) client.login(token);
