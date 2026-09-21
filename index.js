@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Instância do Client do Discord
+// 1. Instância do Bot
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -10,30 +10,22 @@ const client = new Client({
   ]
 });
 
-// 2. Servidor Express para manter o bot online no Render
+// 2. Servidor Web Express (Render 24/7)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => res.send('Bot de Notificação Online!'));
+app.listen(PORT, () => {
+  console.log(`[Express] Servidor Web ativo na porta ${PORT}`);
+});
 
-// 3. Inicialização Unificada
-app.listen(PORT, async () => {
-  console.log(`Servidor Web ativo na porta ${PORT}`);
-  
-  const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
-  if (!token) {
-    console.error('❌ ERRO CRÍTICO: A variável TOKEN não existe no Render!');
-    return;
-  }
+// 3. Eventos de Conexão do Discord
+client.once('ready', () => {
+  console.log(`[Discord] ✅ BOT ONLINE E CONECTADO COMO: ${client.user.tag}`);
+});
 
-  console.log('Tentando conectar ao Discord...');
-  try {
-    await client.login(token);
-    console.log(`✅ LOGIN BEM-SUCEDIDO! BOT CONECTADO COMO: ${client.user.tag}`);
-  } catch (err) {
-    console.error('❌ ERRO AO FAZER LOGIN NO DISCORD:');
-    console.error('Detalhe do erro:', err.message);
-  }
+client.on('error', (err) => {
+  console.error('[Discord] ❌ Erro de Conexão:', err.message);
 });
 
 // ID do Canal onde a notificação será enviada
@@ -46,7 +38,7 @@ client.on('messageCreate', async (message) => {
   const texto = message.content.trim();
 
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
-    // Permissão: Apenas Administradores ou Gestores
+    // Permissão: Administrador ou Gestor
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
       return message.reply('❌ Precisa de ter permissão de Administrador ou Gerir Servidor.');
@@ -86,3 +78,14 @@ client.on('messageCreate', async (message) => {
     }
   }
 });
+
+// 5. Autenticação
+const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+if (!token) {
+  console.error('[Discord] ❌ ERRO: Variável TOKEN não configurada no Render!');
+} else {
+  console.log('[Discord] Autenticando com o token...');
+  client.login(token).catch(err => {
+    console.error('[Discord] ❌ Falha no login:', err.message);
+  });
+}
