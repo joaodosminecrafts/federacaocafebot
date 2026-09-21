@@ -142,17 +142,16 @@ client.on('guildMemberRemove', async (member) => {
   canal.send({ embeds: [embedSaida] }).catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
 
-// 6. Autenticação e Diagnóstico
+// 6. Autenticação e Diagnóstico detalhado
 console.log('Iniciando tentativa de conexão com o Discord...');
+console.log('Verificando se o TOKEN existe:', process.env.TOKEN ? 'SIM (carregado)' : 'NÃO (vazio)');
 
-if (!process.env.TOKEN) {
-  console.error('❌ ERRO CRÍTICO: A variável de ambiente TOKEN não está configurada no Render!');
-} else {
-  client.login(process.env.TOKEN)
-    .then(() => {
-      console.log('✅ Autenticação realizada com sucesso no Discord!');
-    })
-    .catch((err) => {
-      console.error('❌ ERRO AO FAZER LOGIN NO DISCORD:', err.message);
-    });
-}
+client.login(process.env.TOKEN)
+  .then(() => {
+    console.log(`✅ Autenticação realizada com sucesso! Logado como: ${client.user.tag}`);
+  })
+  .catch((err) => {
+    console.error('❌ O DISCORD RECUSOU O LOGIN:');
+    console.error(err);
+  });
+
