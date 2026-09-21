@@ -16,39 +16,40 @@ const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => res.send('Bot de Notificação Online!'));
 
-app.listen(PORT, () => {
+// 3. Inicialização Unificada
+app.listen(PORT, async () => {
   console.log(`Servidor Web ativo na porta ${PORT}`);
   
   const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
   if (!token) {
-    console.error('❌ ERRO: Variável TOKEN não encontrada nas Environment Variables do Render!');
+    console.error('❌ ERRO CRÍTICO: A variável TOKEN não existe no Render!');
     return;
   }
 
   console.log('Tentando conectar ao Discord...');
-  client.login(token).catch(err => {
-    console.error('❌ ERRO AO CONECTAR AO DISCORD:', err.message);
-  });
-});
-
-client.once('ready', () => {
-  console.log(`✅ BOT ONLINE E CONECTADO COMO: ${client.user.tag}`);
+  try {
+    await client.login(token);
+    console.log(`✅ LOGIN BEM-SUCEDIDO! BOT CONECTADO COMO: ${client.user.tag}`);
+  } catch (err) {
+    console.error('❌ ERRO AO FAZER LOGIN NO DISCORD:');
+    console.error('Detalhe do erro:', err.message);
+  }
 });
 
 // ID do Canal onde a notificação será enviada
 const ID_CANAL_JOGOS = '1463018033651122176';
 
-// 3. Comando %notificarjogo
+// 4. Comando %notificarjogo
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const texto = message.content.trim();
 
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
-    // Permissão: Apenas Administradores ou quem tem permissão de Gerenciar Servidor
+    // Permissão: Apenas Administradores ou Gestores
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-      return message.reply('❌ Você precisa ter permissão de Administrador ou Gerenciar Servidor.');
+      return message.reply('❌ Precisa de ter permissão de Administrador ou Gerir Servidor.');
     }
 
     const conteudo = texto.slice(14).trim();
