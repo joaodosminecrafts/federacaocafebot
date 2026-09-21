@@ -1,13 +1,20 @@
-const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField, Options } = require('discord.js');
 const express = require('express');
 
-// 1. Instância do Bot
+// 1. Instância do Bot com opções de conexão rápida
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  makeCache: Options.cacheWithLimits({
+    MessageManager: 10,
+  }),
+  rest: {
+    timeout: 30000,
+    retries: 3
+  }
 });
 
 // 2. Servidor Web Express (Render 24/7)
@@ -19,7 +26,7 @@ app.listen(PORT, () => {
   console.log(`[Express] Servidor Web ativo na porta ${PORT}`);
 });
 
-// 3. Eventos de Conexão do Discord
+// 3. Eventos do Discord
 client.once('ready', () => {
   console.log(`[Discord] ✅ BOT ONLINE E CONECTADO COMO: ${client.user.tag}`);
 });
@@ -79,8 +86,9 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 5. Autenticação
+// 5. Login
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+
 if (!token) {
   console.error('[Discord] ❌ ERRO: Variável TOKEN não configurada no Render!');
 } else {
