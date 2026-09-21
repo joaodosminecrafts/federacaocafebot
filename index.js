@@ -1,23 +1,16 @@
-const { Client, GatewayIntentBits, PermissionsBitField, Options } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Instância do Bot com opções de conexão rápida
+// 1. Instância do Bot
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ],
-  makeCache: Options.cacheWithLimits({
-    MessageManager: 10,
-  }),
-  rest: {
-    timeout: 30000,
-    retries: 3
-  }
+  ]
 });
 
-// 2. Servidor Web Express (Render 24/7)
+// 2. Servidor Web Express (Render)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -28,11 +21,7 @@ app.listen(PORT, () => {
 
 // 3. Eventos do Discord
 client.once('ready', () => {
-  console.log(`[Discord] ✅ BOT ONLINE E CONECTADO COMO: ${client.user.tag}`);
-});
-
-client.on('error', (err) => {
-  console.error('[Discord] ❌ Erro de Conexão:', err.message);
+  console.log(`[Discord] ✅ SUCCESS: Bot online e autenticado como: ${client.user.tag}`);
 });
 
 // ID do Canal onde a notificação será enviada
@@ -45,7 +34,6 @@ client.on('messageCreate', async (message) => {
   const texto = message.content.trim();
 
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
-    // Permissão: Administrador ou Gestor
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
       return message.reply('❌ Precisa de ter permissão de Administrador ou Gerir Servidor.');
@@ -86,14 +74,24 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 5. Login
-const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+// 5. Início com Captura Total de Erros
+async function iniciarBot() {
+  const tokenBruto = process.env.TOKEN;
 
-if (!token) {
-  console.error('[Discord] ❌ ERRO: Variável TOKEN não configurada no Render!');
-} else {
-  console.log('[Discord] Autenticando com o token...');
-  client.login(token).catch(err => {
-    console.error('[Discord] ❌ Falha no login:', err.message);
-  });
+  if (!tokenBruto) {
+    console.error('[ERRO CRÍTICO] A variável TOKEN não está cadastrada no Render.');
+    return;
+  }
+
+  const token = tokenBruto.trim();
+  console.log(`[Discord] Testando token (tamanho: ${token.length} caracteres)...`);
+
+  try {
+    await client.login(token);
+  } catch (error) {
+    console.error('[Discord] ❌ FALHA NA AUTENTICAÇÃO!');
+    console.error(`Detalhes: ${error.message}`);
+  }
 }
+
+iniciarBot();
