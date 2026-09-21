@@ -1,16 +1,7 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// 1. Servidor Web para manter o bot online 24/7 no Render (Porta dinâmica)
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => res.send('Bot online 24/7!'));
-app.listen(PORT, () => {
-  console.log(`Servidor Express rodando na porta ${PORT}`);
-});
-
-// 2. Intenções do Bot
+// 1. Instância do Client do Discord
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -18,6 +9,28 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers
   ]
+});
+
+// 2. Servidor Express para o Render / UptimeRobot
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => res.send('Bot online 24/7!'));
+
+app.listen(PORT, () => {
+  console.log(`Servidor Express rodando na porta ${PORT}`);
+  
+  // Tenta autenticar o bot assim que o servidor web inicia
+  const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+  if (!token) {
+    console.error('❌ ERRO: Variável TOKEN não encontrada nas Environment Variables do Render!');
+    return;
+  }
+
+  console.log('Tentando conectar ao Discord...');
+  client.login(token).catch(err => {
+    console.error('❌ ERRO AO CONECTAR AO DISCORD:', err.message);
+  });
 });
 
 client.once('ready', () => {
@@ -122,7 +135,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// 4. Evento Real de Boas-Vindas (Quando alguém entra)
+// 4. Eventos Automáticos de Entrada e Saída
 client.on('guildMemberAdd', async (member) => {
   const canal = member.guild.channels.cache.get(ID_CANAL_BOASVINDAS);
   if (!canal) return;
@@ -142,7 +155,6 @@ client.on('guildMemberAdd', async (member) => {
   canal.send({ embeds: [embedBoasVindas] }).catch(err => console.log('Erro ao enviar boas-vindas:', err));
 });
 
-// 5. Evento Real de Saída (Quando alguém sai)
 client.on('guildMemberRemove', async (member) => {
   const canal = member.guild.channels.cache.get(ID_CANAL_SAIDA);
   if (!canal) return;
@@ -162,17 +174,3 @@ client.on('guildMemberRemove', async (member) => {
 
   canal.send({ embeds: [embedSaida] }).catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
-
-// 6. Autenticação
-async function iniciarBot() {
-  const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
-  if (!token) return console.error('❌ TOKEN ausente!');
-
-  try {
-    await client.login(token);
-  } catch (error) {
-    console.error('❌ Erro de login:', error.message);
-  }
-}
-
-iniciarBot();
