@@ -19,7 +19,7 @@ const client = new Client({
 });
 
 client.once('ready', () => {
-  console.log(`✅ Bot online como ${client.user.tag}!`);
+  console.log(`✅ BOT ONLINE E CONECTADO COMO: ${client.user.tag}`);
 });
 
 // Configurações de IDs dos Canais
@@ -36,7 +36,6 @@ client.on('messageCreate', async (message) => {
   const texto = message.content.trim();
 
   // --- COMANDO DE NOTIFICAÇÃO DE JOGO ---
-  // Uso: %notificarjogo [EmojiSeason] [EmojiTime1] [EmojiTime2] [NickRoblox] [LinkRoblox]
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas administradores podem usar este comando.');
@@ -66,7 +65,6 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Canal de jogos não encontrado!');
     }
 
-    // Monta a estrutura com o emoji exato enviado na mensagem do usuario
     const mensagemJogo = `# ${emojiSeason} | ${emojiTime1} VS ${emojiTime2}\n\n` +
       `**Server Aberto!**\n` +
       `Nick: \`${nickRoblox}\`\n` +
@@ -75,7 +73,7 @@ client.on('messageCreate', async (message) => {
 
     await canalJogos.send({ 
       content: mensagemJogo,
-      allowedMentions: { parse: ['everyone'] } // Permite o spoiler do @here funcionar
+      allowedMentions: { parse: ['everyone'] }
     });
 
     await message.reply('✅ Notificação enviada com sucesso para o canal!');
@@ -142,16 +140,24 @@ client.on('guildMemberRemove', async (member) => {
   canal.send({ embeds: [embedSaida] }).catch(err => console.log('Erro ao enviar mensagem de saída:', err));
 });
 
-// 6. Autenticação e Diagnóstico detalhado
-console.log('Iniciando tentativa de conexão com o Discord...');
-console.log('Verificando se o TOKEN existe:', process.env.TOKEN ? 'SIM (carregado)' : 'NÃO (vazio)');
+// 6. Autenticação com Captura Forçada de Erro
+async function iniciarBot() {
+  console.log('--- INICIANDO DIAGNÓSTICO DE LOGIN ---');
+  const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
-client.login(process.env.TOKEN)
-  .then(() => {
-    console.log(`✅ Autenticação realizada com sucesso! Logado como: ${client.user.tag}`);
-  })
-  .catch((err) => {
-    console.error('❌ O DISCORD RECUSOU O LOGIN:');
-    console.error(err);
-  });
+  if (!token) {
+    console.error('❌ ERRO CRÍTICO: A variável TOKEN está completamente vazia no Render!');
+    return;
+  }
 
+  console.log('TOKEN encontrado! Tentando autenticar no Discord...');
+  try {
+    await client.login(token);
+  } catch (error) {
+    console.error('❌ ERRO DETETADO AO CONECTAR AO DISCORD:');
+    console.error('Mensagem de Erro:', error.message);
+    console.error('Código de Erro:', error.code);
+  }
+}
+
+iniciarBot();
