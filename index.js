@@ -24,7 +24,14 @@ client.once('ready', () => {
 
 const ID_CANAL_JOGOS = '1463018033651122176';
 
-// Converte apenas os números do placar sem quebrar os IDs de emojis customizados
+// Emojis customizados com os IDs exatos fornecidos
+const EMOJI_SEASON3 = '<:season3:1548367891391455262>';
+const EMOJI_MOTM = '<:motm:1549773462543929344>';
+const EMOJI_SEGUNDO = '<:segundolugar:1549773565186809918>';
+const EMOJI_TERCEIRO = '<:terceirolugar:1549773591908843531>';
+const EMOJI_JUIZES = '<:juizes:1546717233391206500>';
+
+// Converte os números do placar preservando os IDs de emojis customizados do Discord
 function converterParaEmojiNumero(texto) {
   const mapaNumeros = {
     '0': ':zero:', '1': ':one:', '2': ':two:', '3': ':three:', '4': ':four:',
@@ -48,7 +55,7 @@ client.on('messageCreate', async (message) => {
   if (texto.toLowerCase().startsWith('%notificarjogo')) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-      return message.reply('❌ Precisa de permissão de Administrador ou Gerir Servidor.');
+      return message.reply('❌ Precisa de permissão de Administrador ou Gerenciar Servidor.');
     }
 
     const conteudo = texto.slice(14).trim();
@@ -90,7 +97,7 @@ client.on('messageCreate', async (message) => {
   if (texto.toLowerCase().startsWith('%resultado')) {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
         !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-      return message.reply('❌ Precisa de permissão de Administrador ou Gerir Servidor.');
+      return message.reply('❌ Precisa de permissão de Administrador ou Gerenciar Servidor.');
     }
 
     const filter = m => m.author.id === message.author.id;
@@ -113,7 +120,7 @@ client.on('messageCreate', async (message) => {
       await msgPerg2.delete().catch(() => {});
 
       // Painel inicial
-      let estruturaResultado = `# :season3: | JOGO FINALIZADO\n` +
+      let estruturaResultado = `# ${EMOJI_SEASON3} | JOGO FINALIZADO\n` +
         `-# :stadium: ${estadio}\n\n` +
         `${placarFormatado}\n\n` +
         `**Estatísticas**\n*Aguardando dados...*\n\n` +
@@ -128,7 +135,7 @@ client.on('messageCreate', async (message) => {
       await resp3.first().delete().catch(() => {});
       await msgPerg3.delete().catch(() => {});
 
-      estruturaResultado = `# :season3: | JOGO FINALIZADO\n` +
+      estruturaResultado = `# ${EMOJI_SEASON3} | JOGO FINALIZADO\n` +
         `-# :stadium: ${estadio}\n\n` +
         `${placarFormatado}\n\n` +
         `**Estatísticas**\n${estatisticas}\n\n` +
@@ -136,10 +143,16 @@ client.on('messageCreate', async (message) => {
 
       await msgPainel.edit(estruturaResultado);
 
-      // 4. MVPs
-      const msgPerg4 = await channel.send('4️⃣ **Quais são os MVPs?**:');
+      // 4. MVPs (Digita os 3 nomes em linha única: feio feiozinho feiozao)
+      const msgPerg4 = await channel.send('4️⃣ **Quem são os 3 MVPs?** (envie os 3 nicks separados por espaço)\n*(Exemplo: `feio feiozinho feiozao`)*');
       const resp4 = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] });
-      const mvps = resp4.first().content;
+      const mvpsEntrada = resp4.first().content.trim().split(/\s+/);
+      
+      const mvpsFormatados = 
+        `${EMOJI_MOTM} ${mvpsEntrada[0] || 'N/A'}\n` +
+        `${EMOJI_SEGUNDO} ${mvpsEntrada[1] || 'N/A'}\n` +
+        `${EMOJI_TERCEIRO} ${mvpsEntrada[2] || 'N/A'}`;
+
       await resp4.first().delete().catch(() => {});
       await msgPerg4.delete().catch(() => {});
 
@@ -151,12 +164,12 @@ client.on('messageCreate', async (message) => {
       await msgPerg5.delete().catch(() => {});
 
       // Resultado Final
-      estruturaResultado = `# :season3: | JOGO FINALIZADO\n` +
+      estruturaResultado = `# ${EMOJI_SEASON3} | JOGO FINALIZADO\n` +
         `-# :stadium: ${estadio}\n\n` +
         `${placarFormatado}\n\n` +
         `**Estatísticas**\n${estatisticas}\n\n` +
-        `**MVP's e Menções honrosas**\n${mvps}\n\n` +
-        `:juizes: **JUÍZES:** ${juizes}`;
+        `**MVP's e Menções honrosas**\n${mvpsFormatados}\n\n` +
+        `${EMOJI_JUIZES} **JUÍZES:** ${juizes}`;
 
       await msgPainel.edit(estruturaResultado);
 
