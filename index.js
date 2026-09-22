@@ -24,21 +24,17 @@ client.once('ready', () => {
 
 const ID_CANAL_JOGOS = '1463018033651122176';
 
-// Função auxiliar para converter números normais em emojis do Discord
+// Converte apenas os números do placar sem quebrar os IDs de emojis customizados
 function converterParaEmojiNumero(texto) {
   const mapaNumeros = {
-    '0': ':zero:',
-    '1': ':one:',
-    '2': ':two:',
-    '3': ':three:',
-    '4': ':four:',
-    '5': ':five:',
-    '6': ':six:',
-    '7': ':seven:',
-    '8': ':eight:',
-    '9': ':nine:'
+    '0': ':zero:', '1': ':one:', '2': ':two:', '3': ':three:', '4': ':four:',
+    '5': ':five:', '6': ':six:', '7': ':seven:', '8': ':eight:', '9': ':nine:'
   };
-  return texto.replace(/\d/g, digito => mapaNumeros[digito] || digito);
+
+  return texto.replace(/(<a?:[a-zA-Z0-9_]+:\d+>)|(\d)/g, (match, emoji) => {
+    if (emoji) return emoji;
+    return mapaNumeros[match] || match;
+  });
 }
 
 client.on('messageCreate', async (message) => {
@@ -116,7 +112,7 @@ client.on('messageCreate', async (message) => {
       await resp2.first().delete().catch(() => {});
       await msgPerg2.delete().catch(() => {});
 
-      // Estrutura inicial
+      // Painel inicial
       let estruturaResultado = `# :season3: | JOGO FINALIZADO\n` +
         `-# :stadium: ${estadio}\n\n` +
         `${placarFormatado}\n\n` +
@@ -163,7 +159,7 @@ client.on('messageCreate', async (message) => {
         `:juizes: **JUÍZES:** ${juizes}`;
 
       await msgPainel.edit(estruturaResultado);
-      
+
       const avisoSucesso = await channel.send('✅ **Resultado publicado com sucesso!**');
       setTimeout(() => avisoSucesso.delete().catch(() => {}), 5000);
 
