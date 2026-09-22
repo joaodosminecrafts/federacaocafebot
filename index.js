@@ -79,7 +79,6 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Função para iniciar a autenticação
 async function iniciarBot() {
   const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
@@ -96,5 +95,4 @@ async function iniciarBot() {
   }
 }
 
-// EXECUÇÃO OBRIGATÓRIA DA FUNÇÃO
 iniciarBot();
