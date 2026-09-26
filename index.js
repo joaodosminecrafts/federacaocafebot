@@ -6,12 +6,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ],
-  rest: {
-    timeout: 15000
-  }
+  ]
 });
 
+// Servidor Express para manter o Render ativo
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -24,14 +22,14 @@ client.once('ready', () => {
 
 const ID_CANAL_JOGOS = '1463018033651122176';
 
-// Emojis customizados com os IDs exatos fornecidos
+// Emojis customizados com IDs exatos
 const EMOJI_SEASON3 = '<:season3:1548367891391455262>';
 const EMOJI_MOTM = '<:motm:1549773462543929344>';
 const EMOJI_SEGUNDO = '<:segundolugar:1549773565186809918>';
 const EMOJI_TERCEIRO = '<:terceirolugar:1549773591908843531>';
 const EMOJI_JUIZES = '<:juizes:1546717233391206500>';
 
-// Converte os números do placar preservando os IDs de emojis customizados do Discord
+// Converte os números do placar preservando IDs de emojis customizados
 function converterParaEmojiNumero(texto) {
   const mapaNumeros = {
     '0': ':zero:', '1': ':one:', '2': ':two:', '3': ':three:', '4': ':four:',
@@ -143,7 +141,7 @@ client.on('messageCreate', async (message) => {
 
       await msgPainel.edit(estruturaResultado);
 
-      // 4. MVPs (Digita os 3 nomes em linha única: feio feiozinho feiozao)
+      // 4. MVPs
       const msgPerg4 = await channel.send('4️⃣ **Quem são os 3 MVPs?** (envie os 3 nicks separados por espaço)\n*(Exemplo: `feio feiozinho feiozao`)*');
       const resp4 = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] });
       const mvpsEntrada = resp4.first().content.trim().split(/\s+/);
@@ -183,20 +181,10 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-async function iniciarBot() {
-  const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
-
-  if (!token) {
-    console.error('[ERRO CRÍTICO] A variável TOKEN não foi encontrada no Render!');
-    return;
-  }
-
-  console.log('[Discord] Tentando autenticar com o token...');
-  try {
-    await client.login(token);
-  } catch (err) {
-    console.error('[Erro no Login do Discord]:', err.message);
-  }
+// Autenticação direta
+const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+if (token) {
+  client.login(token).catch(err => console.error('[Erro de Autenticação]:', err.message));
+} else {
+  console.error('[ERRO] Variável TOKEN não configurada no Render!');
 }
-
-iniciarBot();
