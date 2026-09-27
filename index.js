@@ -1,6 +1,14 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
+// Inicializa o servidor Express para manter o serviço do Render ativo
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.get('/', (req, res) => res.send('Bot de Notificação e Resultados Online!'));
+app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
+
+// Configuração do Cliente Discord
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -9,15 +17,8 @@ const client = new Client({
   ]
 });
 
-// Servidor Express
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => res.send('Bot de Notificação e Resultados Online!'));
-app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
-
 client.once('ready', () => {
-  console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
+  console.log(`[Discord] ✅ Bot online com sucesso como: ${client.user.tag}`);
 });
 
 const ID_CANAL_JOGOS = '1463018033651122176';
@@ -180,8 +181,15 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Autenticação direta e logs no console
-console.log('[Discord] A iniciar autenticação...');
-client.login(process.env.TOKEN).catch(err => {
-  console.error('[ERRO DE LOGIN DISCORD]:', err.message);
-});
+// Tratamento de Erros e Autenticação
+const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+
+if (!token) {
+  console.error('[ERRO CRÍTICO] Variável TOKEN não configurada no Render!');
+} else {
+  console.log('[Discord] Autenticando com o Discord...');
+  
+  client.login(token).catch(err => {
+    console.error('[ERRO DISCORD LOGIN]:', err);
+  });
+}
