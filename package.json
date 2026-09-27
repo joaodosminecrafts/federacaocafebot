@@ -1,17 +1,19 @@
 {
   "name": "federacaocafebot",
   "version": "1.0.0",
-  "description": "Bot de Discord para a Federação Café",
+  "description": "Bot de Notificação e Resultados",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "engines": {
-    "node": "20.x"
-  },
   "dependencies": {
-    "discord.js": "^14.18.0",
-    "express": "^4.21.2"
+    "discord.js": "^14.14.1",
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "zlib-sync": "^0.1.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
 
