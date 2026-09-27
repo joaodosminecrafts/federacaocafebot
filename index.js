@@ -1,20 +1,26 @@
 const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
 
-// Inicializa o servidor Express para manter o serviço do Render ativo
+// Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout do Render
+setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
+
 const app = express();
 const PORT = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Bot de Notificação e Resultados Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração do Cliente Discord
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
-  ]
+  ],
+  rest: {
+    timeout: 60000,
+    retries: 3
+  }
 });
 
 client.once('ready', () => {
@@ -181,15 +187,14 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Tratamento de Erros e Autenticação
+// Autenticação
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
 if (!token) {
-  console.error('[ERRO CRÍTICO] Variável TOKEN não configurada no Render!');
+  console.error('[ERRO CRÍTICO] Variável TOKEN não configurada!');
 } else {
   console.log('[Discord] Autenticando com o Discord...');
-  
   client.login(token).catch(err => {
-    console.error('[ERRO DISCORD LOGIN]:', err);
+    console.error('[ERRO DISCORD LOGIN]:', err.message);
   });
 }
