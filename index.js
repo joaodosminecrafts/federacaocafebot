@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
 
@@ -56,16 +56,15 @@ client.on('messageCreate', async (message) => {
   const texto = message.content.trim();
 
   // =========================================================
-  // COMANDO: !freeagency
+  // COMANDO: !freeagency (Estilo Embed com foto de perfil)
   // =========================================================
   if (texto.toLowerCase().startsWith('!freeagency')) {
-    const conteudo = texto.slice(11).trim(); // Remove o "!freeagency" do texto
+    const conteudo = texto.slice(11).trim();
 
-    // Validação se enviou vazio
     if (!conteudo) {
       const avisoErro = await message.reply(
         '❌ **Uso incorreto!** Por favor, escreva a sua mensagem após o comando.\n' +
-        '*Exemplo:* `!freeagency Sou goleiro e estou procurando time para a Season 3`'
+        '*Exemplo:* `!freeagency F/a gk Plat: Pc Exp: ...`'
       );
       setTimeout(() => avisoErro.delete().catch(() => {}), 8000);
       return;
@@ -76,22 +75,25 @@ client.on('messageCreate', async (message) => {
       return message.reply(`❌ O canal de Free Agency (\`${ID_CANAL_FREEAGENCY}\`) não foi encontrado!`);
     }
 
-    // Montagem da mensagem final
-    const mensagemFormatada = `# ☕️| Free Agent\n` +
-      `@: ${message.author}\n\n` +
-      `${conteudo}`;
+    // Criação do Embed idêntico ao modelo da imagem
+    const embedFreeAgency = new EmbedBuilder()
+      .setColor(0xFFD700) // Cor dourada/amarela na lateral do embed
+      .setTitle('🏆 Free Agency')
+      .setDescription(`<@${message.author.id}>\n${message.author.tag}\n(${message.author.id})\n\n${conteudo}`)
+      .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 })) // Foto de perfil do usuário no canto superior direito
+      .setTimestamp();
 
     try {
-      await canalFreeAgency.send(mensagemFormatada);
+      await canalFreeAgency.send({ embeds: [embedFreeAgency] });
       
-      // Apaga a mensagem original de comando do usuário para manter limpo
+      // Apaga o comando digitado no chat para manter limpo
       await message.delete().catch(() => {});
 
       const avisoSucesso = await message.channel.send(`✅ ${message.author}, seu Free Agent foi publicado com sucesso no canal!`);
       setTimeout(() => avisoSucesso.delete().catch(() => {}), 5000);
 
     } catch (err) {
-      console.error('[Erro FreeAgency]', err.message);
+      console.error('[Erro FreeAgency Embed]', err.message);
       return message.reply(`❌ Houve um erro ao enviar para o canal de Free Agency: \`${err.message}\``);
     }
   }
