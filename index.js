@@ -27,9 +27,11 @@ client.once('ready', () => {
   console.log(`[Discord] ✅ Bot online com sucesso como: ${client.user.tag}`);
 });
 
+// IDs dos Canais
 const ID_CANAL_JOGOS = '1463018033651122176';
+const ID_CANAL_FREEAGENCY = '1527738994505547856';
 
-// Emojis customizados
+// Emojis customizados por ID
 const EMOJI_SEASON3 = '<:season3:1548367891391455262>';
 const EMOJI_MOTM = '<:motm:1549773462543929344>';
 const EMOJI_SEGUNDO = '<:segundolugar:1549773565186809918>';
@@ -52,6 +54,47 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const texto = message.content.trim();
+
+  // =========================================================
+  // COMANDO: !freeagency
+  // =========================================================
+  if (texto.toLowerCase().startsWith('!freeagency')) {
+    const conteudo = texto.slice(11).trim(); // Remove o "!freeagency" do texto
+
+    // Validação se enviou vazio
+    if (!conteudo) {
+      const avisoErro = await message.reply(
+        '❌ **Uso incorreto!** Por favor, escreva a sua mensagem após o comando.\n' +
+        '*Exemplo:* `!freeagency Sou goleiro e estou procurando time para a Season 3`'
+      );
+      setTimeout(() => avisoErro.delete().catch(() => {}), 8000);
+      return;
+    }
+
+    const canalFreeAgency = message.guild.channels.cache.get(ID_CANAL_FREEAGENCY);
+    if (!canalFreeAgency) {
+      return message.reply(`❌ O canal de Free Agency (\`${ID_CANAL_FREEAGENCY}\`) não foi encontrado!`);
+    }
+
+    // Montagem da mensagem final
+    const mensagemFormatada = `# ☕️| Free Agent\n` +
+      `@: ${message.author}\n\n` +
+      `${conteudo}`;
+
+    try {
+      await canalFreeAgency.send(mensagemFormatada);
+      
+      // Apaga a mensagem original de comando do usuário para manter limpo
+      await message.delete().catch(() => {});
+
+      const avisoSucesso = await message.channel.send(`✅ ${message.author}, seu Free Agent foi publicado com sucesso no canal!`);
+      setTimeout(() => avisoSucesso.delete().catch(() => {}), 5000);
+
+    } catch (err) {
+      console.error('[Erro FreeAgency]', err.message);
+      return message.reply(`❌ Houve um erro ao enviar para o canal de Free Agency: \`${err.message}\``);
+    }
+  }
 
   // =========================================================
   // COMANDO: %notificarjogo
@@ -77,7 +120,7 @@ client.on('messageCreate', async (message) => {
       return message.reply(`❌ Canal de jogos (\`${ID_CANAL_JOGOS}\`) não foi encontrado!`);
     }
 
-    const mensagemJogo = `# ${partes[0]} | ${partes[1]} VS${partes[2]}\n\n` +
+    const mensagemJogo = `# ${partes[0]} | ${partes[1]} VS ${partes[2]}\n\n` +
       `**Server Aberto!**\n` +
       `Nick: \`${partes[3]}\`\n` +
       `Link: ${partes[4]}\n\n` +
