@@ -100,7 +100,7 @@ client.on('messageCreate', async (message) => {
   // ---------------------------------------------------------
   // 1. CONFIGURAÇÕES DA LIGA (APENAS ADMINS)
   // ---------------------------------------------------------
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'removeteam'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam'].includes(command)) {
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas Administradores podem usar este comando.');
     }
@@ -154,6 +154,37 @@ client.on('messageCreate', async (message) => {
       saveDatabase();
 
       return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}! (Total de times: ${db.teams.length})`);
+    }
+
+    // COMANDO PARA ADICIONAR MÚLTIPLOS TIMES DE UMA VEZ
+    if (command === 'addteams') {
+      const lines = message.content.split('\n');
+      let adicionados = 0;
+
+      // Pula a primeira linha que contém o comando %addteams
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Procura por menção de cargo <@&ID> e o emoji na linha
+        const roleMentionMatch = line.match(/<@&(\d+)>/);
+        const parts = line.split(/ +/);
+        const emoji = parts.find(p => p.includes(':') || /\p{Extended_Pictographic}/u.test(p));
+
+        if (roleMentionMatch && emoji) {
+          const roleId = roleMentionMatch[1];
+          db.teams = db.teams.filter(t => t.roleId !== roleId);
+          db.teams.push({ roleId, emoji });
+          adicionados++;
+        }
+      }
+
+      if (adicionados === 0) {
+        return message.reply('❌ Nenhum time válido encontrado. Exemplo de uso:\n`%addteams`\n`@Time1 :emoji1:`\n`@Time2 :emoji2:`');
+      }
+
+      saveDatabase();
+      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s) com sucesso! Total de times na liga: **${db.teams.length}**.`);
     }
 
     if (command === 'removeteam') {
