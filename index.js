@@ -11,7 +11,7 @@ const {
 const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
 const fs = require('fs');
-const path = require('path');
+const path = path = require('path');
 
 // Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout do Render
 setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
@@ -28,6 +28,7 @@ const DB_PATH = path.join(__dirname, 'league_config.json');
 let db = {
   marketOpen: true,
   marketChannelId: '', 
+  faChannelId: '', // Canal exclusivo para Free Agency
   rosterLimit: 20,
   ownerRoleIds: [], 
   teams: [] 
@@ -86,10 +87,41 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
-// Manipulador de Mensagens (% prefixo)
+// Manipulador de Mensagens
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
+  // =========================================================
+  // COMANDOS COM PREFIXO "!" (FREE AGENCY)
+  // =========================================================
+  if (message.content.startsWith('!')) {
+    const argsFA = message.content.slice(1).trim().split(/ +/);
+    const commandFA = argsFA.shift().toLowerCase();
+
+    if (commandFA === 'freeagency' || commandFA === 'fa') {
+      const marketMsg = argsFA.join(' ');
+      if (!marketMsg) return message.reply('❌ Insere a tua mensagem. Ex: `!freeagency Procuro time de atacante`');
+
+      const faChannel = message.guild.channels.cache.get(db.faChannelId);
+      if (!faChannel) {
+        return message.reply('❌ Canal de Free Agency não configurado pela administração! (Use `%setfachannel #canal`)');
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0xFFD700)
+        .setTitle('🏆 Free Agency')
+        .setDescription(`<@${message.member.id}>\n${message.author.username}\n(${message.author.id})\n\n${marketMsg}`)
+        .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 }))
+        .setTimestamp();
+
+      await faChannel.send({ embeds: [embed] });
+      return message.reply('✅ O teu anúncio de Free Agent foi enviado com sucesso no canal de Free Agency!');
+    }
+  }
+
+  // =========================================================
+  // COMANDOS COM PREFIXO "%" (LIGA E GESTÃO)
+  // =========================================================
   if (!message.content.startsWith('%')) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
@@ -100,7 +132,7 @@ client.on('messageCreate', async (message) => {
   // ---------------------------------------------------------
   // 1. CONFIGURAÇÕES DA LIGA (APENAS ADMINS)
   // ---------------------------------------------------------
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam'].includes(command)) {
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas Administradores podem usar este comando.');
     }
@@ -122,7 +154,15 @@ client.on('messageCreate', async (message) => {
       if (!channel) return message.reply('❌ Menciona um canal válido. Ex: `%setmarketchannel #transfer-market`');
       db.marketChannelId = channel.id;
       saveDatabase();
-      return message.reply(`✅ Canal de mercado definido para: ${channel}`);
+      return message.reply(`✅ Canal de anúncios de transferências definido para: ${channel}`);
+    }
+
+    if (command === 'setfachannel') {
+      const channel = message.mentions.channels.first();
+      if (!channel) return message.reply('❌ Menciona um canal válido. Ex: `%setfachannel #free-agency`');
+      db.faChannelId = channel.id;
+      saveDatabase();
+      return message.reply(`✅ Canal de Free Agency definido para: ${channel}`);
     }
 
     if (command === 'setrosterlimit') {
@@ -156,17 +196,14 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}! (Total de times: ${db.teams.length})`);
     }
 
-    // COMANDO PARA ADICIONAR MÚLTIPLOS TIMES DE UMA VEZ
     if (command === 'addteams') {
       const lines = message.content.split('\n');
       let adicionados = 0;
 
-      // Pula a primeira linha que contém o comando %addteams
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
-        // Procura por menção de cargo <@&ID> e o emoji na linha
         const roleMentionMatch = line.match(/<@&(\d+)>/);
         const parts = line.split(/ +/);
         const emoji = parts.find(p => p.includes(':') || /\p{Extended_Pictographic}/u.test(p));
@@ -411,29 +448,6 @@ client.on('messageCreate', async (message) => {
       .setFooter({ text: `Total de equipes: ${db.teams.length}` });
 
     return message.reply({ embeds: [embed] });
-  }
-
-  // ---------------------------------------------------------
-  // 8. COMANDO %freeagency
-  // ---------------------------------------------------------
-  if (command === 'freeagency') {
-    const marketMsg = args.join(' ');
-    if (!marketMsg) return message.reply('❌ Insere a tua mensagem. Ex: `%freeagency Procuro time de atacante`');
-
-    const marketChannel = guild.channels.cache.get(db.marketChannelId);
-    if (!marketChannel) {
-      return message.reply('❌ Canal de Free Agency/Mercado não configurado.');
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor(0xFFD700)
-      .setTitle('🏆 Free Agency')
-      .setDescription(`<@${member.id}>\n${member.user.username}\n(${member.id})\n\n${marketMsg}`)
-      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-      .setTimestamp();
-
-    await marketChannel.send({ embeds: [embed] });
-    return message.reply('✅ O teu anúncio de Free Agent foi enviado no canal!');
   }
 });
 
