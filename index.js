@@ -360,7 +360,30 @@ client.on('messageCreate', async (message) => {
   }
 
   // ---------------------------------------------------------
-  // 7. COMANDO %freeagency
+  // 7. COMANDO %teams OU %times (Listar todos os times)
+  // ---------------------------------------------------------
+  if (command === 'teams' || command === 'times') {
+    if (db.teams.length === 0) {
+      return message.reply('📋 Nenhum time cadastrado no momento.');
+    }
+
+    const lista = db.teams.map((t, index) => {
+      const role = guild.roles.cache.get(t.roleId);
+      const nomeCargo = role ? `<@&${t.roleId}>` : 'Cargo não encontrado';
+      return `${index + 1}. ${t.emoji} ${nomeCargo}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0x0099FF)
+      .setTitle('🏆 Times Cadastrados na Liga')
+      .setDescription(lista)
+      .setFooter({ text: `Total de equipes: ${db.teams.length}` });
+
+    return message.reply({ embeds: [embed] });
+  }
+
+  // ---------------------------------------------------------
+  // 8. COMANDO %freeagency
   // ---------------------------------------------------------
   if (command === 'freeagency') {
     const marketMsg = args.join(' ');
