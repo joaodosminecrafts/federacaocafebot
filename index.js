@@ -30,7 +30,7 @@ let db = {
   marketChannelId: '', 
   rosterLimit: 20,
   ownerRoleIds: [], // IDs dos cargos Club Owner / Assistant
-  teams: [] // { roleId, emoji, logoUrl }
+  teams: [] // { roleId, emoji }
 };
 
 function loadDatabase() {
@@ -82,7 +82,6 @@ function isCoach(member) {
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  // Verifica se a mensagem começa com o prefixo %
   if (!message.content.startsWith('%')) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
@@ -136,15 +135,14 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'addteam') {
       const role = message.mentions.roles.first();
-      const emoji = args[1];
-      const logoUrl = args[2];
+      const emoji = args[1]; // Ex: :SPO:
 
-      if (!role || !emoji || !logoUrl) {
-        return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji: URL_do_Escudo`');
+      if (!role || !emoji) {
+        return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji:`');
       }
 
       db.teams = db.teams.filter(t => t.roleId !== role.id);
-      db.teams.push({ roleId: role.id, emoji, logoUrl });
+      db.teams.push({ roleId: role.id, emoji });
       saveDatabase();
 
       return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}!`);
@@ -232,7 +230,6 @@ client.on('messageCreate', async (message) => {
           .setColor(0xFF0000)
           .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
           .setTitle('Offer Accepted')
-          .setThumbnail(team.logoUrl)
           .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has accepted the offer to ${team.emoji} <@&${team.roleId}>`)
           .addFields(
             { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
@@ -281,7 +278,6 @@ client.on('messageCreate', async (message) => {
       .setColor(0x888888)
       .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
       .setTitle('Player Released')
-      .setThumbnail(team.logoUrl)
       .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has been released from ${team.emoji} <@&${team.roleId}>`)
       .addFields(
         { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
@@ -312,7 +308,6 @@ client.on('messageCreate', async (message) => {
       .setColor(0xFFA500)
       .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
       .setTitle('Contract Terminated')
-      .setThumbnail(team.logoUrl)
       .setDescription(`<@${member.id}> \`${member.user.username}\` has demanded out of ${team.emoji} <@&${team.roleId}>`)
       .addFields(
         { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
@@ -330,13 +325,11 @@ client.on('messageCreate', async (message) => {
     const role = message.mentions.roles.first();
     if (!role) return message.reply('❌ Menciona o cargo do time. Ex: `%roster @Sport Recife`');
 
-    const team = db.teams.find(t => t.roleId === role.id);
     const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
 
     const embed = new EmbedBuilder()
       .setColor(0x00FF00)
       .setTitle(`📋 Elenco - ${role.name}`)
-      .setThumbnail(team ? team.logoUrl : null)
       .setDescription(members)
       .addFields({ name: '🔋 Roster Cap', value: `\`${role.members.size}/${db.rosterLimit}\`` });
 
