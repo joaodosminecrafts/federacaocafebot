@@ -3,9 +3,6 @@ const {
   GatewayIntentBits, 
   PermissionsBitField, 
   EmbedBuilder, 
-  SlashCommandBuilder, 
-  REST, 
-  Routes, 
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle, 
@@ -25,12 +22,12 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração de Persistência Simples (JSON local)
+// Configuração de Persistência (JSON local)
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
 let db = {
   marketOpen: true,
-  marketChannelId: '1527738994505547856', // Canal padrão
+  marketChannelId: '', 
   rosterLimit: 20,
   ownerRoleIds: [], // IDs dos cargos Club Owner / Assistant
   teams: [] // { roleId, emoji, logoUrl }
@@ -67,81 +64,8 @@ const client = new Client({
   rest: { timeout: 60000, retries: 3 }
 });
 
-// Definição dos Slash Commands
-const commands = [
-  new SlashCommandBuilder()
-    .setName('offer')
-    .setDescription('Envia uma proposta de contrato a um jogador.')
-    .addUserOption(opt => opt.setName('player').setDescription('Jogador a ser contratado').setRequired(true)),
-  
-  new SlashCommandBuilder()
-    .setName('release')
-    .setDescription('Dispensa um jogador do seu time.')
-    .addUserOption(opt => opt.setName('player').setDescription('Jogador a ser dispensado').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('demand')
-    .setDescription('Pede a saída do seu time atual para virar Free Agent.'),
-
-  new SlashCommandBuilder()
-    .setName('abrirjanela')
-    .setDescription('[Admin] Abre a janela de transferências.'),
-
-  new SlashCommandBuilder()
-    .setName('fecharjanela')
-    .setDescription('[Admin] Fecha a janela de transferências.'),
-
-  new SlashCommandBuilder()
-    .setName('setmarketchannel')
-    .setDescription('[Admin] Define o canal de anúncios do mercado.')
-    .addChannelOption(opt => opt.setName('canal').setDescription('Canal de transferências').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('setrosterlimit')
-    .setDescription('[Admin] Define o limite máximo do elenco.')
-    .addIntegerOption(opt => opt.setName('limite').setDescription('Limite máximo (ex: 20)').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('setownercargos')
-    .setDescription('[Admin] Define os cargos de Club Owner e Assistant.')
-    .addRoleOption(opt => opt.setName('owner').setDescription('Cargo de Owner').setRequired(true))
-    .addRoleOption(opt => opt.setName('assistant').setDescription('Cargo de Assistant').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('addteam')
-    .setDescription('[Admin] Cadastra um novo time na liga.')
-    .addRoleOption(opt => opt.setName('cargo').setDescription('Cargo do time').setRequired(true))
-    .addStringOption(opt => opt.setName('emoji').setDescription('Emoji do time').setRequired(true))
-    .addStringOption(opt => opt.setName('escudo').setDescription('URL da imagem do escudo').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('removeteam')
-    .setDescription('[Admin] Remove um time cadastrado.')
-    .addRoleOption(opt => opt.setName('cargo').setDescription('Cargo do time').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('roster')
-    .setDescription('Exibe o elenco de um time.')
-    .addRoleOption(opt => opt.setName('time').setDescription('Cargo do time').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('freeagency')
-    .setDescription('Anuncia seu perfil como Free Agent.')
-    .addStringOption(opt => opt.setName('mensagem').setDescription('Sua mensagem de Free Agent').setRequired(true))
-].map(cmd => cmd.toJSON());
-
-// Registro dos Comandos na Inicialização
-client.once('ready', async () => {
+client.once('ready', () => {
   console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
-  
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-  try {
-    console.log('[Slash Commands] Registrando comandos globais...');
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('[Slash Commands] ✅ Todos os comandos de barra registrados!');
-  } catch (error) {
-    console.error('[Slash Commands] Erro ao registrar:', error);
-  }
 });
 
 // Funções Auxiliares
@@ -154,129 +78,139 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
-// Manipulador dos Slash Commands
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+// Manipulador de Mensagens (% prefixo)
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
 
-  const { commandName, options, guild, member } = interaction;
+  // Verifica se a mensagem começa com o prefixo %
+  if (!message.content.startsWith('%')) return;
+
+  const args = message.content.slice(1).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+  const member = message.member;
+  const guild = message.guild;
 
   // ---------------------------------------------------------
   // 1. CONFIGURAÇÕES DA LIGA (APENAS ADMINS)
   // ---------------------------------------------------------
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'removeteam'].includes(commandName)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'removeteam'].includes(command)) {
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return interaction.reply({ content: '❌ Apenas Administradores podem usar este comando.', ephemeral: true });
+      return message.reply('❌ Apenas Administradores podem usar este comando.');
     }
 
-    if (commandName === 'abrirjanela') {
+    if (command === 'abrirjanela') {
       db.marketOpen = true;
       saveDatabase();
-      return interaction.reply('🔓 **Janela de transferências ABERTA com sucesso!**');
+      return message.reply('🔓 **Janela de transferências ABERTA com sucesso!**');
     }
 
-    if (commandName === 'fecharjanela') {
+    if (command === 'fecharjanela') {
       db.marketOpen = false;
       saveDatabase();
-      return interaction.reply('🔒 **Janela de transferências FECHADA!**');
+      return message.reply('🔒 **Janela de transferências FECHADA!**');
     }
 
-    if (commandName === 'setmarketchannel') {
-      const channel = options.getChannel('canal');
+    if (command === 'setmarketchannel') {
+      const channel = message.mentions.channels.first();
+      if (!channel) return message.reply('❌ Menciona um canal válido. Ex: `%setmarketchannel #transfer-market`');
       db.marketChannelId = channel.id;
       saveDatabase();
-      return interaction.reply(`✅ Canal de mercado definido para: ${channel}`);
+      return message.reply(`✅ Canal de mercado definido para: ${channel}`);
     }
 
-    if (commandName === 'setrosterlimit') {
-      const limit = options.getInteger('limite');
+    if (command === 'setrosterlimit') {
+      const limit = parseInt(args[0]);
+      if (isNaN(limit)) return message.reply('❌ Insere um número válido. Ex: `%setrosterlimit 20`');
       db.rosterLimit = limit;
       saveDatabase();
-      return interaction.reply(`✅ Limite de elenco (Roster Cap) definido para **${limit}**.`);
+      return message.reply(`✅ Limite de elenco (Roster Cap) definido para **${limit}**.`);
     }
 
-    if (commandName === 'setownercargos') {
-      const owner = options.getRole('owner');
-      const assistant = options.getRole('assistant');
-      db.ownerRoleIds = [owner.id];
-      if (assistant) db.ownerRoleIds.push(assistant.id);
+    if (command === 'setownercargos') {
+      const roles = message.mentions.roles.map(r => r.id);
+      if (roles.length === 0) return message.reply('❌ Menciona pelo menos um cargo. Ex: `%setownercargos @ClubOwner @Assistant`');
+      db.ownerRoleIds = roles;
       saveDatabase();
-      return interaction.reply(`✅ Cargos de gestão configurados com sucesso!`);
+      return message.reply('✅ Cargos de gestão configurados com sucesso!');
     }
 
-    if (commandName === 'addteam') {
-      const role = options.getRole('cargo');
-      const emoji = options.getString('emoji');
-      const logoUrl = options.getString('escudo');
+    if (command === 'addteam') {
+      const role = message.mentions.roles.first();
+      const emoji = args[1];
+      const logoUrl = args[2];
+
+      if (!role || !emoji || !logoUrl) {
+        return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji: URL_do_Escudo`');
+      }
 
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       db.teams.push({ roleId: role.id, emoji, logoUrl });
       saveDatabase();
 
-      return interaction.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}!`);
+      return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}!`);
     }
 
-    if (commandName === 'removeteam') {
-      const role = options.getRole('cargo');
+    if (command === 'removeteam') {
+      const role = message.mentions.roles.first();
+      if (!role) return message.reply('❌ Menciona o cargo do time a remover. Ex: `%removeteam @Time`');
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       saveDatabase();
-      return interaction.reply(`🗑️ Time ${role} removido do sistema.`);
+      return message.reply(`🗑️ Time ${role} removido do sistema.`);
     }
   }
 
   // ---------------------------------------------------------
   // 2. VALIDAÇÃO DE JANELA FECHADA
   // ---------------------------------------------------------
-  if (['offer', 'release', 'demand'].includes(commandName) && !db.marketOpen) {
-    return interaction.reply({
-      content: '🔒 **Mercado Fechado!**\nA janela de transferências está fechada no momento. Aguarde a abertura oficial da administração.',
-      ephemeral: true
-    });
+  if (['sign', 'release', 'demand'].includes(command) && !db.marketOpen) {
+    return message.reply('🔒 **Mercado Fechado!**\nA janela de transferências está fechada no momento. Aguarde a abertura oficial da administração.');
   }
 
   // ---------------------------------------------------------
-  // 3. COMANDO /OFFER
+  // 3. COMANDO %sign (Contratar)
   // ---------------------------------------------------------
-  if (commandName === 'offer') {
+  if (command === 'sign') {
     if (!isCoach(member)) {
-      return interaction.reply({ content: '❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem fazer ofertas.', ephemeral: true });
+      return message.reply('❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem fazer ofertas.');
     }
 
     const team = getUserTeam(member);
     if (!team) {
-      return interaction.reply({ content: '❌ Você não pertence a nenhum time cadastrado no bot.', ephemeral: true });
+      return message.reply('❌ Você não pertence a nenhum time cadastrado no bot.');
     }
 
-    const targetUser = options.getUser('player');
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+    const targetUser = message.mentions.users.first();
+    if (!targetUser) {
+      return message.reply('❌ Menciona o jogador que pretendes contratar. Ex: `%sign @Jogador`');
+    }
 
+    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember || targetUser.bot) {
-      return interaction.reply({ content: '❌ Jogador inválido.', ephemeral: true });
+      return message.reply('❌ Jogador inválido.');
     }
 
     if (getUserTeam(targetMember)) {
-      return interaction.reply({ content: `⚠️ O jogador ${targetUser} já pertence a uma equipe!`, ephemeral: true });
+      return message.reply(`⚠️ O jogador ${targetUser} já pertence a uma equipe!`);
     }
 
     const teamRole = guild.roles.cache.get(team.roleId);
     const currentRosterCount = teamRole ? teamRole.members.size : 0;
 
     if (currentRosterCount >= db.rosterLimit) {
-      return interaction.reply({ content: `🔋 **Elenco Cheio!** O time já possui **${currentRosterCount}/${db.rosterLimit}** jogadores.`, ephemeral: true });
+      return message.reply(`🔋 **Elenco Cheio!** O time já possui **${currentRosterCount}/${db.rosterLimit}** jogadores.`);
     }
 
-    // Botões de Aceite/Recusa
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('decline_offer').setLabel('Recusar').setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.reply({
+    const sentMsg = await message.reply({
       content: `📝 ${targetUser}, você recebeu uma proposta para entrar no time **${teamRole.name}** de ${member}!`,
       components: [row]
     });
 
-    const replyMsg = await interaction.fetchReply();
-    const collector = replyMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+    const collector = sentMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
 
     collector.on('collect', async i => {
       if (i.user.id !== targetUser.id) {
@@ -289,13 +223,11 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (i.customId === 'accept_offer') {
-        // Adiciona o cargo do time ao jogador
         await targetMember.roles.add(teamRole);
 
         const newRosterCount = teamRole.members.size;
         const marketChannel = guild.channels.cache.get(db.marketChannelId);
 
-        // Montagem do Embed idêntico ao TeamSign
         const embed = new EmbedBuilder()
           .setColor(0xFF0000)
           .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
@@ -317,23 +249,26 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   // ---------------------------------------------------------
-  // 4. COMANDO /RELEASE
+  // 4. COMANDO %release (Soltar Jogador)
   // ---------------------------------------------------------
-  if (commandName === 'release') {
+  if (command === 'release') {
     if (!isCoach(member)) {
-      return interaction.reply({ content: '❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem dispensar jogadores.', ephemeral: true });
+      return message.reply('❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem dispensar jogadores.');
     }
 
     const team = getUserTeam(member);
     if (!team) {
-      return interaction.reply({ content: '❌ Você não pertence a nenhum time cadastrado.', ephemeral: true });
+      return message.reply('❌ Você não pertence a nenhum time cadastrado.');
     }
 
-    const targetUser = options.getUser('player');
-    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+    const targetUser = message.mentions.users.first();
+    if (!targetUser) {
+      return message.reply('❌ Menciona o jogador que pretendes dispensar. Ex: `%release @Jogador`');
+    }
 
+    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember || !targetMember.roles.cache.has(team.roleId)) {
-      return interaction.reply({ content: '❌ O jogador informado não pertence ao seu time.', ephemeral: true });
+      return message.reply('❌ O jogador informado não pertence ao seu time.');
     }
 
     const teamRole = guild.roles.cache.get(team.roleId);
@@ -355,16 +290,16 @@ client.on('interactionCreate', async (interaction) => {
 
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
 
-    return interaction.reply({ content: `✅ ${targetUser} foi dispensado com sucesso.`, ephemeral: true });
+    return message.reply(`✅ ${targetUser} foi dispensado com sucesso.`);
   }
 
   // ---------------------------------------------------------
-  // 5. COMANDO /DEMAND
+  // 5. COMANDO %demand (Sair do Time)
   // ---------------------------------------------------------
-  if (commandName === 'demand') {
+  if (command === 'demand') {
     const team = getUserTeam(member);
     if (!team) {
-      return interaction.reply({ content: '❌ Você não pertence a nenhum time no momento.', ephemeral: true });
+      return message.reply('❌ Você não pertence a nenhum time no momento.');
     }
 
     const teamRole = guild.roles.cache.get(team.roleId);
@@ -385,16 +320,17 @@ client.on('interactionCreate', async (interaction) => {
 
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
 
-    return interaction.reply({ content: `✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`, ephemeral: true });
+    return message.reply(`✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`);
   }
 
   // ---------------------------------------------------------
-  // 6. COMANDO /ROSTER
+  // 6. COMANDO %roster (Ver Elenco)
   // ---------------------------------------------------------
-  if (commandName === 'roster') {
-    const role = options.getRole('time');
-    const team = db.teams.find(t => t.roleId === role.id);
+  if (command === 'roster') {
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply('❌ Menciona o cargo do time. Ex: `%roster @Sport Recife`');
 
+    const team = db.teams.find(t => t.roleId === role.id);
     const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
 
     const embed = new EmbedBuilder()
@@ -404,29 +340,30 @@ client.on('interactionCreate', async (interaction) => {
       .setDescription(members)
       .addFields({ name: '🔋 Roster Cap', value: `\`${role.members.size}/${db.rosterLimit}\`` });
 
-    return interaction.reply({ embeds: [embed] });
+    return message.reply({ embeds: [embed] });
   }
 
   // ---------------------------------------------------------
-  // 7. COMANDO /FREEAGENCY
+  // 7. COMANDO %freeagency
   // ---------------------------------------------------------
-  if (commandName === 'freeagency') {
-    const msg = options.getString('mensagem');
-    const marketChannel = guild.channels.cache.get(db.marketChannelId);
+  if (command === 'freeagency') {
+    const marketMsg = args.join(' ');
+    if (!marketMsg) return message.reply('❌ Insere a tua mensagem. Ex: `%freeagency Procuro time de atacante`');
 
+    const marketChannel = guild.channels.cache.get(db.marketChannelId);
     if (!marketChannel) {
-      return interaction.reply({ content: '❌ Canal de Free Agency/Mercado não configurado.', ephemeral: true });
+      return message.reply('❌ Canal de Free Agency/Mercado não configurado.');
     }
 
     const embed = new EmbedBuilder()
       .setColor(0xFFD700)
       .setTitle('🏆 Free Agency')
-      .setDescription(`<@${member.id}>\n${member.user.username}\n(${member.id})\n\n${msg}`)
+      .setDescription(`<@${member.id}>\n${member.user.username}\n(${member.id})\n\n${marketMsg}`)
       .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
       .setTimestamp();
 
     await marketChannel.send({ embeds: [embed] });
-    return interaction.reply({ content: '✅ Seu anúncio de Free Agent foi enviado no canal!', ephemeral: true });
+    return message.reply('✅ O teu anúncio de Free Agent foi enviado no canal!');
   }
 });
 
