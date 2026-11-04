@@ -196,7 +196,6 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}! (Total de times: ${db.teams.length})`);
     }
 
-    // COMANDO PARA ADICIONAR VÁRIOS TIMES DE UMA VEZ
     if (command === 'addteams') {
       const lines = message.content.split('\n');
       let adicionados = 0;
@@ -205,10 +204,7 @@ client.on('messageCreate', async (message) => {
         const line = lines[i].trim();
         if (!line || line.startsWith('%addteams')) continue;
 
-        // Extrai o ID do cargo (<@&123456789>)
         const roleMentionMatch = line.match(/<@&(\d+)>/);
-        
-        // Extrai o emoji customizado do Discord (<:nome:123456789> ou <a:nome:123456789>) OU emoji normal
         const customEmojiMatch = line.match(/<a?:\w+:\d+>/);
         const parts = line.split(/ +/);
         const standardEmoji = parts.find(p => (p.includes(':') && !p.startsWith('<@&')) || /\p{Extended_Pictographic}/u.test(p));
