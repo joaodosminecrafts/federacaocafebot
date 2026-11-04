@@ -199,13 +199,11 @@ client.on('messageCreate', async (message) => {
       return message.reply(`🔋 **Elenco Cheio!** O time já possui **${currentRosterCount}/${db.rosterLimit}** jogadores.`);
     }
 
-    // Criação dos botões
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('decline_offer').setLabel('Recusar').setStyle(ButtonStyle.Danger)
     );
 
-    // Envio da proposta via DM
     try {
       const dmMsg = await targetUser.send({
         content: `📝 Olá ${targetUser}, você recebeu uma proposta oficial de contrato para entrar no time **${teamRole.name}** (${team.emoji}) enviada pelo coach **${member.user.username}** no servidor **${guild.name}**!`,
@@ -214,27 +212,30 @@ client.on('messageCreate', async (message) => {
 
       await message.reply(`📩 Proposta enviada com sucesso no privado (DM) de ${targetUser}!`);
 
-      const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 }); // 24h para responder
+      const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 }); // 24h
 
       collector.on('collect', async i => {
+        // Evita erro de "o aplicativo não respondeu a tempo"
+        await i.deferUpdate().catch(() => {});
+
         if (i.customId === 'decline_offer') {
-          await i.update({ content: `❌ Você recusou a proposta do **${teamRole.name}**.`, components: [] });
-          await message.channel.send(`❌ ${targetUser} recusou a proposta do **${teamRole.name}**.`);
+          await dmMsg.edit({ content: `❌ Você recusou a proposta do **${teamRole.name}**.`, components: [] }).catch(() => {});
+          await message.channel.send(`❌ ${targetUser} recusou a proposta do **${teamRole.name}**.`).catch(() => {});
           return;
         }
 
         if (i.customId === 'accept_offer') {
-          // Re-checagem da janela e elenco no momento do aceite
           if (!db.marketOpen) {
-            return i.reply({ content: '🔒 A janela de transferências fechou antes de você aceitar.', ephemeral: true });
+            return targetUser.send('🔒 A janela de transferências fechou antes de você aceitar.').catch(() => {});
           }
 
           const currentSize = teamRole.members.size;
           if (currentSize >= db.rosterLimit) {
-            return i.reply({ content: '🔋 O time atingiu o limite de elenco antes de você aceitar.', ephemeral: true });
+            return targetUser.send('🔋 O time atingiu o limite máximo de elenco antes de você aceitar.').catch(() => {});
           }
 
-          await targetMember.roles.add(teamRole);
+          // Adiciona o cargo no servidor principal
+          await targetMember.roles.add(teamRole).catch(err => console.error('Erro ao dar cargo:', err));
 
           const newRosterCount = teamRole.members.size;
           const marketChannel = guild.channels.cache.get(db.marketChannelId);
@@ -250,10 +251,10 @@ client.on('messageCreate', async (message) => {
             );
 
           if (marketChannel) {
-            await marketChannel.send({ embeds: [embed] });
+            await marketChannel.send({ embeds: [embed] }).catch(() => {});
           }
 
-          await i.update({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora faz parte do **${teamRole.name}**!`, components: [] });
+          await dmMsg.edit({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora faz parte do **${teamRole.name}**!`, components: [] }).catch(() => {});
         }
       });
 
