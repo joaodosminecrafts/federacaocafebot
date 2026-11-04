@@ -1,6 +1,20 @@
-const { Client, GatewayIntentBits, PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { 
+  Client, 
+  GatewayIntentBits, 
+  PermissionsBitField, 
+  EmbedBuilder, 
+  SlashCommandBuilder, 
+  REST, 
+  Routes, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  ComponentType 
+} = require('discord.js');
 const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 // Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout do Render
 setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
@@ -8,238 +22,416 @@ setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.get('/', (req, res) => res.send('Bot de Notificação e Resultados Online!'));
+app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
+
+// Configuração de Persistência Simples (JSON local)
+const DB_PATH = path.join(__dirname, 'league_config.json');
+
+let db = {
+  marketOpen: true,
+  marketChannelId: '1527738994505547856', // Canal padrão
+  rosterLimit: 20,
+  ownerRoleIds: [], // IDs dos cargos Club Owner / Assistant
+  teams: [] // { roleId, emoji, logoUrl }
+};
+
+function loadDatabase() {
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      const data = fs.readFileSync(DB_PATH, 'utf-8');
+      db = { ...db, ...JSON.parse(data) };
+    } catch (e) {
+      console.error('[DB] Erro ao carregar dados:', e.message);
+    }
+  }
+}
+
+function saveDatabase() {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch (e) {
+    console.error('[DB] Erro ao salvar dados:', e.message);
+  }
+}
+
+loadDatabase();
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ],
-  rest: {
-    timeout: 60000,
-    retries: 3
+  rest: { timeout: 60000, retries: 3 }
+});
+
+// Definição dos Slash Commands
+const commands = [
+  new SlashCommandBuilder()
+    .setName('offer')
+    .setDescription('Envia uma proposta de contrato a um jogador.')
+    .addUserOption(opt => opt.setName('player').setDescription('Jogador a ser contratado').setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('release')
+    .setDescription('Dispensa um jogador do seu time.')
+    .addUserOption(opt => opt.setName('player').setDescription('Jogador a ser dispensado').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('demand')
+    .setDescription('Pede a saída do seu time atual para virar Free Agent.'),
+
+  new SlashCommandBuilder()
+    .setName('abrirjanela')
+    .setDescription('[Admin] Abre a janela de transferências.'),
+
+  new SlashCommandBuilder()
+    .setName('fecharjanela')
+    .setDescription('[Admin] Fecha a janela de transferências.'),
+
+  new SlashCommandBuilder()
+    .setName('setmarketchannel')
+    .setDescription('[Admin] Define o canal de anúncios do mercado.')
+    .addChannelOption(opt => opt.setName('canal').setDescription('Canal de transferências').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('setrosterlimit')
+    .setDescription('[Admin] Define o limite máximo do elenco.')
+    .addIntegerOption(opt => opt.setName('limite').setDescription('Limite máximo (ex: 20)').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('setownercargos')
+    .setDescription('[Admin] Define os cargos de Club Owner e Assistant.')
+    .addRoleOption(opt => opt.setName('owner').setDescription('Cargo de Owner').setRequired(true))
+    .addRoleOption(opt => opt.setName('assistant').setDescription('Cargo de Assistant').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('addteam')
+    .setDescription('[Admin] Cadastra um novo time na liga.')
+    .addRoleOption(opt => opt.setName('cargo').setDescription('Cargo do time').setRequired(true))
+    .addStringOption(opt => opt.setName('emoji').setDescription('Emoji do time').setRequired(true))
+    .addStringOption(opt => opt.setName('escudo').setDescription('URL da imagem do escudo').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('removeteam')
+    .setDescription('[Admin] Remove um time cadastrado.')
+    .addRoleOption(opt => opt.setName('cargo').setDescription('Cargo do time').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('roster')
+    .setDescription('Exibe o elenco de um time.')
+    .addRoleOption(opt => opt.setName('time').setDescription('Cargo do time').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('freeagency')
+    .setDescription('Anuncia seu perfil como Free Agent.')
+    .addStringOption(opt => opt.setName('mensagem').setDescription('Sua mensagem de Free Agent').setRequired(true))
+].map(cmd => cmd.toJSON());
+
+// Registro dos Comandos na Inicialização
+client.once('ready', async () => {
+  console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
+  
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  try {
+    console.log('[Slash Commands] Registrando comandos globais...');
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('[Slash Commands] ✅ Todos os comandos de barra registrados!');
+  } catch (error) {
+    console.error('[Slash Commands] Erro ao registrar:', error);
   }
 });
 
-client.once('ready', () => {
-  console.log(`[Discord] ✅ Bot online com sucesso como: ${client.user.tag}`);
-});
-
-// IDs dos Canais
-const ID_CANAL_JOGOS = '1463018033651122176';
-const ID_CANAL_FREEAGENCY = '1527738994505547856';
-
-// Emojis customizados por ID
-const EMOJI_SEASON3 = '<:season3:1548367891391455262>';
-const EMOJI_MOTM = '<:motm:1549773462543929344>';
-const EMOJI_SEGUNDO = '<:segundolugar:1549773565186809918>';
-const EMOJI_TERCEIRO = '<:terceirolugar:1549773591908843531>';
-const EMOJI_JUIZES = '<:juizes:1546717233391206500>';
-
-function converterParaEmojiNumero(texto) {
-  const mapaNumeros = {
-    '0': ':zero:', '1': ':one:', '2': ':two:', '3': ':three:', '4': ':four:',
-    '5': ':five:', '6': ':six:', '7': ':seven:', '8': ':eight:', '9': ':nine:'
-  };
-
-  return texto.replace(/(<a?:[a-zA-Z0-9_]+:\d+>)|(\d)/g, (match, emoji) => {
-    if (emoji) return emoji;
-    return mapaNumeros[match] || match;
-  });
+// Funções Auxiliares
+function getUserTeam(member) {
+  return db.teams.find(t => member.roles.cache.has(t.roleId));
 }
 
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
+function isCoach(member) {
+  if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+  return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
+}
 
-  const texto = message.content.trim();
+// Manipulador dos Slash Commands
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
 
-  // =========================================================
-  // COMANDO: !freeagency (Estilo Embed com foto de perfil)
-  // =========================================================
-  if (texto.toLowerCase().startsWith('!freeagency')) {
-    const conteudo = texto.slice(11).trim();
+  const { commandName, options, guild, member } = interaction;
 
-    if (!conteudo) {
-      const avisoErro = await message.reply(
-        '❌ **Uso incorreto!** Por favor, escreva a sua mensagem após o comando.\n' +
-        '*Exemplo:* `!freeagency F/a gk Plat: Pc Exp: ...`'
+  // ---------------------------------------------------------
+  // 1. CONFIGURAÇÕES DA LIGA (APENAS ADMINS)
+  // ---------------------------------------------------------
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'removeteam'].includes(commandName)) {
+    if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({ content: '❌ Apenas Administradores podem usar este comando.', ephemeral: true });
+    }
+
+    if (commandName === 'abrirjanela') {
+      db.marketOpen = true;
+      saveDatabase();
+      return interaction.reply('🔓 **Janela de transferências ABERTA com sucesso!**');
+    }
+
+    if (commandName === 'fecharjanela') {
+      db.marketOpen = false;
+      saveDatabase();
+      return interaction.reply('🔒 **Janela de transferências FECHADA!**');
+    }
+
+    if (commandName === 'setmarketchannel') {
+      const channel = options.getChannel('canal');
+      db.marketChannelId = channel.id;
+      saveDatabase();
+      return interaction.reply(`✅ Canal de mercado definido para: ${channel}`);
+    }
+
+    if (commandName === 'setrosterlimit') {
+      const limit = options.getInteger('limite');
+      db.rosterLimit = limit;
+      saveDatabase();
+      return interaction.reply(`✅ Limite de elenco (Roster Cap) definido para **${limit}**.`);
+    }
+
+    if (commandName === 'setownercargos') {
+      const owner = options.getRole('owner');
+      const assistant = options.getRole('assistant');
+      db.ownerRoleIds = [owner.id];
+      if (assistant) db.ownerRoleIds.push(assistant.id);
+      saveDatabase();
+      return interaction.reply(`✅ Cargos de gestão configurados com sucesso!`);
+    }
+
+    if (commandName === 'addteam') {
+      const role = options.getRole('cargo');
+      const emoji = options.getString('emoji');
+      const logoUrl = options.getString('escudo');
+
+      db.teams = db.teams.filter(t => t.roleId !== role.id);
+      db.teams.push({ roleId: role.id, emoji, logoUrl });
+      saveDatabase();
+
+      return interaction.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}!`);
+    }
+
+    if (commandName === 'removeteam') {
+      const role = options.getRole('cargo');
+      db.teams = db.teams.filter(t => t.roleId !== role.id);
+      saveDatabase();
+      return interaction.reply(`🗑️ Time ${role} removido do sistema.`);
+    }
+  }
+
+  // ---------------------------------------------------------
+  // 2. VALIDAÇÃO DE JANELA FECHADA
+  // ---------------------------------------------------------
+  if (['offer', 'release', 'demand'].includes(commandName) && !db.marketOpen) {
+    return interaction.reply({
+      content: '🔒 **Mercado Fechado!**\nA janela de transferências está fechada no momento. Aguarde a abertura oficial da administração.',
+      ephemeral: true
+    });
+  }
+
+  // ---------------------------------------------------------
+  // 3. COMANDO /OFFER
+  // ---------------------------------------------------------
+  if (commandName === 'offer') {
+    if (!isCoach(member)) {
+      return interaction.reply({ content: '❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem fazer ofertas.', ephemeral: true });
+    }
+
+    const team = getUserTeam(member);
+    if (!team) {
+      return interaction.reply({ content: '❌ Você não pertence a nenhum time cadastrado no bot.', ephemeral: true });
+    }
+
+    const targetUser = options.getUser('player');
+    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+
+    if (!targetMember || targetUser.bot) {
+      return interaction.reply({ content: '❌ Jogador inválido.', ephemeral: true });
+    }
+
+    if (getUserTeam(targetMember)) {
+      return interaction.reply({ content: `⚠️ O jogador ${targetUser} já pertence a uma equipe!`, ephemeral: true });
+    }
+
+    const teamRole = guild.roles.cache.get(team.roleId);
+    const currentRosterCount = teamRole ? teamRole.members.size : 0;
+
+    if (currentRosterCount >= db.rosterLimit) {
+      return interaction.reply({ content: `🔋 **Elenco Cheio!** O time já possui **${currentRosterCount}/${db.rosterLimit}** jogadores.`, ephemeral: true });
+    }
+
+    // Botões de Aceite/Recusa
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('decline_offer').setLabel('Recusar').setStyle(ButtonStyle.Danger)
+    );
+
+    await interaction.reply({
+      content: `📝 ${targetUser}, você recebeu uma proposta para entrar no time **${teamRole.name}** de ${member}!`,
+      components: [row]
+    });
+
+    const replyMsg = await interaction.fetchReply();
+    const collector = replyMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+
+    collector.on('collect', async i => {
+      if (i.user.id !== targetUser.id) {
+        return i.reply({ content: '❌ Apenas o jogador convidado pode responder a esta proposta.', ephemeral: true });
+      }
+
+      if (i.customId === 'decline_offer') {
+        await i.update({ content: `❌ ${targetUser} recusou a proposta do ${teamRole.name}.`, components: [] });
+        return;
+      }
+
+      if (i.customId === 'accept_offer') {
+        // Adiciona o cargo do time ao jogador
+        await targetMember.roles.add(teamRole);
+
+        const newRosterCount = teamRole.members.size;
+        const marketChannel = guild.channels.cache.get(db.marketChannelId);
+
+        // Montagem do Embed idêntico ao TeamSign
+        const embed = new EmbedBuilder()
+          .setColor(0xFF0000)
+          .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
+          .setTitle('Offer Accepted')
+          .setThumbnail(team.logoUrl)
+          .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has accepted the offer to ${team.emoji} <@&${team.roleId}>`)
+          .addFields(
+            { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
+            { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
+          );
+
+        if (marketChannel) {
+          await marketChannel.send({ embeds: [embed] });
+        }
+
+        await i.update({ content: `✅ Proposta aceita! ${targetUser} agora faz parte do **${teamRole.name}**!`, components: [] });
+      }
+    });
+  }
+
+  // ---------------------------------------------------------
+  // 4. COMANDO /RELEASE
+  // ---------------------------------------------------------
+  if (commandName === 'release') {
+    if (!isCoach(member)) {
+      return interaction.reply({ content: '❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem dispensar jogadores.', ephemeral: true });
+    }
+
+    const team = getUserTeam(member);
+    if (!team) {
+      return interaction.reply({ content: '❌ Você não pertence a nenhum time cadastrado.', ephemeral: true });
+    }
+
+    const targetUser = options.getUser('player');
+    const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+
+    if (!targetMember || !targetMember.roles.cache.has(team.roleId)) {
+      return interaction.reply({ content: '❌ O jogador informado não pertence ao seu time.', ephemeral: true });
+    }
+
+    const teamRole = guild.roles.cache.get(team.roleId);
+    await targetMember.roles.remove(teamRole);
+
+    const newRosterCount = teamRole.members.size;
+    const marketChannel = guild.channels.cache.get(db.marketChannelId);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x888888)
+      .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
+      .setTitle('Player Released')
+      .setThumbnail(team.logoUrl)
+      .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has been released from ${team.emoji} <@&${team.roleId}>`)
+      .addFields(
+        { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
+        { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
       );
-      setTimeout(() => avisoErro.delete().catch(() => {}), 8000);
-      return;
+
+    if (marketChannel) await marketChannel.send({ embeds: [embed] });
+
+    return interaction.reply({ content: `✅ ${targetUser} foi dispensado com sucesso.`, ephemeral: true });
+  }
+
+  // ---------------------------------------------------------
+  // 5. COMANDO /DEMAND
+  // ---------------------------------------------------------
+  if (commandName === 'demand') {
+    const team = getUserTeam(member);
+    if (!team) {
+      return interaction.reply({ content: '❌ Você não pertence a nenhum time no momento.', ephemeral: true });
     }
 
-    const canalFreeAgency = message.guild.channels.cache.get(ID_CANAL_FREEAGENCY);
-    if (!canalFreeAgency) {
-      return message.reply(`❌ O canal de Free Agency (\`${ID_CANAL_FREEAGENCY}\`) não foi encontrado!`);
+    const teamRole = guild.roles.cache.get(team.roleId);
+    await member.roles.remove(teamRole);
+
+    const newRosterCount = teamRole.members.size;
+    const marketChannel = guild.channels.cache.get(db.marketChannelId);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500)
+      .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
+      .setTitle('Contract Terminated')
+      .setThumbnail(team.logoUrl)
+      .setDescription(`<@${member.id}> \`${member.user.username}\` has demanded out of ${team.emoji} <@&${team.roleId}>`)
+      .addFields(
+        { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
+      );
+
+    if (marketChannel) await marketChannel.send({ embeds: [embed] });
+
+    return interaction.reply({ content: `✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`, ephemeral: true });
+  }
+
+  // ---------------------------------------------------------
+  // 6. COMANDO /ROSTER
+  // ---------------------------------------------------------
+  if (commandName === 'roster') {
+    const role = options.getRole('time');
+    const team = db.teams.find(t => t.roleId === role.id);
+
+    const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
+
+    const embed = new EmbedBuilder()
+      .setColor(0x00FF00)
+      .setTitle(`📋 Elenco - ${role.name}`)
+      .setThumbnail(team ? team.logoUrl : null)
+      .setDescription(members)
+      .addFields({ name: '🔋 Roster Cap', value: `\`${role.members.size}/${db.rosterLimit}\`` });
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // ---------------------------------------------------------
+  // 7. COMANDO /FREEAGENCY
+  // ---------------------------------------------------------
+  if (commandName === 'freeagency') {
+    const msg = options.getString('mensagem');
+    const marketChannel = guild.channels.cache.get(db.marketChannelId);
+
+    if (!marketChannel) {
+      return interaction.reply({ content: '❌ Canal de Free Agency/Mercado não configurado.', ephemeral: true });
     }
 
-    // Criação do Embed idêntico ao modelo da imagem
-    const embedFreeAgency = new EmbedBuilder()
-      .setColor(0xFFD700) // Cor dourada/amarela na lateral do embed
+    const embed = new EmbedBuilder()
+      .setColor(0xFFD700)
       .setTitle('🏆 Free Agency')
-      .setDescription(`<@${message.author.id}>\n${message.author.tag}\n(${message.author.id})\n\n${conteudo}`)
-      .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 })) // Foto de perfil do usuário no canto superior direito
+      .setDescription(`<@${member.id}>\n${member.user.username}\n(${member.id})\n\n${msg}`)
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
       .setTimestamp();
 
-    try {
-      await canalFreeAgency.send({ embeds: [embedFreeAgency] });
-      
-      // Apaga o comando digitado no chat para manter limpo
-      await message.delete().catch(() => {});
-
-      const avisoSucesso = await message.channel.send(`✅ ${message.author}, seu Free Agent foi publicado com sucesso no canal!`);
-      setTimeout(() => avisoSucesso.delete().catch(() => {}), 5000);
-
-    } catch (err) {
-      console.error('[Erro FreeAgency Embed]', err.message);
-      return message.reply(`❌ Houve um erro ao enviar para o canal de Free Agency: \`${err.message}\``);
-    }
-  }
-
-  // =========================================================
-  // COMANDO: %notificarjogo
-  // =========================================================
-  if (texto.toLowerCase().startsWith('%notificarjogo')) {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
-        !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-      return message.reply('❌ Precisa de permissão de Administrador ou Gerenciar Servidor.');
-    }
-
-    const conteudo = texto.slice(14).trim();
-    const partes = conteudo.split(/\s+/);
-
-    if (partes.length < 5) {
-      return message.reply(
-        '❌ **Formato incorreto!** Use:\n' +
-        '`%notificarjogo [EmojiSeason] [EmojiTime1] [EmojiTime2] [NickRoblox] [Link]`'
-      );
-    }
-
-    const canalJogos = message.guild.channels.cache.get(ID_CANAL_JOGOS);
-    if (!canalJogos) {
-      return message.reply(`❌ Canal de jogos (\`${ID_CANAL_JOGOS}\`) não foi encontrado!`);
-    }
-
-    const mensagemJogo = `# ${partes[0]} | ${partes[1]} VS ${partes[2]}\n\n` +
-      `**Server Aberto!**\n` +
-      `Nick: \`${partes[3]}\`\n` +
-      `Link: ${partes[4]}\n\n` +
-      `||@here||`;
-
-    try {
-      await canalJogos.send({ 
-        content: mensagemJogo,
-        allowedMentions: { parse: ['everyone'] }
-      });
-      return message.reply('✅ Notificação enviada com sucesso para o canal!');
-    } catch (err) {
-      console.error('[Erro Discord API]', err.message);
-      return message.reply(`❌ Erro ao enviar mensagem no canal: \`${err.message}\``);
-    }
-  }
-
-  // =========================================================
-  // COMANDO INTERATIVO: %resultado
-  // =========================================================
-  if (texto.toLowerCase().startsWith('%resultado')) {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && 
-        !message.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-      return message.reply('❌ Precisa de permissão de Administrador ou Gerenciar Servidor.');
-    }
-
-    const filter = m => m.author.id === message.author.id;
-    const channel = message.channel;
-
-    try {
-      // 1. Times e Placar
-      const msgPerg1 = await channel.send('1️⃣ **Quais os times e o placar?**\n*(Exemplo: `:novazelandia: 6 - 1 :holanda:`)*');
-      const resp1 = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] });
-      const placarEntrada = resp1.first().content;
-      const placarFormatado = converterParaEmojiNumero(placarEntrada);
-      await resp1.first().delete().catch(() => {});
-      await msgPerg1.delete().catch(() => {});
-
-      // 2. Estádio
-      const msgPerg2 = await channel.send('2️⃣ **Qual foi o Estádio?**\n*(Exemplo: `Allianz Riviera`)*');
-      const resp2 = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] });
-      const estadio = resp2.first().content;
-      await resp2.first().delete().catch(() => {});
-      await msgPerg2.delete().catch(() => {});
-
-      // Painel inicial
-      let estruturaResultado = `# ${EMOJI_SEASON3} | JOGO FINALIZADO\n` +
-        `-# :stadium: ${estadio}\n\n` +
-        `${placarFormatado}\n\n` +
-        `**Estatísticas**\n*Aguardando dados...*\n\n` +
-        `**MVP's e Menções honrosas**\n*Aguardando dados...*`;
-
-      const msgPainel = await channel.send(estruturaResultado);
-
-      // 3. Estatísticas
-      const msgPerg3 = await channel.send('3️⃣ **Cole as Estatísticas completas**:');
-      const resp3 = await channel.awaitMessages({ filter, max: 1, time: 120000, errors: ['time'] });
-      const estatisticas = resp3.first().content;
-      await resp3.first().delete().catch(() => {});
-      await msgPerg3.delete().catch(() => {});
-
-      estruturaResultado = `# ${EMOJI_SEASON3} | JOGO FINALIZADO\n` +
-        `-# :stadium: ${estadio}\n\n` +
-        `${placarFormatado}\n\n` +
-        `**Estatísticas**\n${estatisticas}\n\n` +
-        `**MVP's e Menções honrosas**\n*Aguardando dados...*`;
-
-      await msgPainel.edit(estruturaResultado);
-
-      // 4. MVPs
-      const msgPerg4 = await channel.send('4️⃣ **Quem são os 3 MVPs?** (envie os 3 nicks separados por espaço)\n*(Exemplo: `feio feiozinho feiozao`)*');
-      const resp4 = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] });
-      const mvpsEntrada = resp4.first().content.trim().split(/\s+/);
-      
-      const mvpsFormatados = 
-        `${EMOJI_MOTM} ${mvpsEntrada[0] || 'N/A'}\n` +
-        `${EMOJI_SEGUNDO} ${mvpsEntrada[1] || 'N/A'}\n` +
-        `${EMOJI_TERCEIRO} ${mvpsEntrada[2] || 'N/A'}`;
-
-      await resp4.first().delete().catch(() => {});
-      await msgPerg4.delete().catch(() => {});
-
-      // 5. Juízes
-      const msgPerg5 = await channel.send('5️⃣ **Quem foram os Juízes?**\n*(Exemplo: `@Jaoelega8 & @PorcoDeAsa`)*');
-      const resp5 = await channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] });
-      const juizes = resp5.first().content;
-      await resp5.first().delete().catch(() => {});
-      await msgPerg5.delete().catch(() => {});
-
-      // Resultado Final
-      estruturaResultado = `# ${EMOJI_SEASON3} | JOGO FINALIZADO\n` +
-        `-# :stadium: ${estadio}\n\n` +
-        `${placarFormatado}\n\n` +
-        `**Estatísticas**\n${estatisticas}\n\n` +
-        `**MVP's e Menções honrosas**\n${mvpsFormatados}\n\n` +
-        `${EMOJI_JUIZES} **JUÍZES:** ${juizes}`;
-
-      await msgPainel.edit(estruturaResultado);
-
-      const avisoSucesso = await channel.send('✅ **Resultado publicado com sucesso!**');
-      setTimeout(() => avisoSucesso.delete().catch(() => {}), 5000);
-
-    } catch (err) {
-      console.error(err);
-      return channel.send('❌ Tempo limite esgotado (60s) ou erro no preenchimento.');
-    }
+    await marketChannel.send({ embeds: [embed] });
+    return interaction.reply({ content: '✅ Seu anúncio de Free Agent foi enviado no canal!', ephemeral: true });
   }
 });
 
 // Autenticação
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
-
-if (!token) {
-  console.error('[ERRO CRÍTICO] Variável TOKEN não configurada!');
-} else {
-  console.log('[Discord] Autenticando com o Discord...');
-  client.login(token).catch(err => {
-    console.error('[ERRO DISCORD LOGIN]:', err.message);
-  });
+if (token) {
+  client.login(token).catch(err => console.error('[ERRO DISCORD LOGIN]:', err.message));
 }
