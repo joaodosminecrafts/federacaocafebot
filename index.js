@@ -196,17 +196,24 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}! (Total de times: ${db.teams.length})`);
     }
 
+    // COMANDO PARA ADICIONAR VÁRIOS TIMES DE UMA VEZ
     if (command === 'addteams') {
       const lines = message.content.split('\n');
       let adicionados = 0;
 
-      for (let i = 1; i < lines.length; i++) {
+      for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;
+        if (!line || line.startsWith('%addteams')) continue;
 
+        // Extrai o ID do cargo (<@&123456789>)
         const roleMentionMatch = line.match(/<@&(\d+)>/);
+        
+        // Extrai o emoji customizado do Discord (<:nome:123456789> ou <a:nome:123456789>) OU emoji normal
+        const customEmojiMatch = line.match(/<a?:\w+:\d+>/);
         const parts = line.split(/ +/);
-        const emoji = parts.find(p => p.includes(':') || /\p{Extended_Pictographic}/u.test(p));
+        const standardEmoji = parts.find(p => (p.includes(':') && !p.startsWith('<@&')) || /\p{Extended_Pictographic}/u.test(p));
+        
+        const emoji = customEmojiMatch ? customEmojiMatch[0] : standardEmoji;
 
         if (roleMentionMatch && emoji) {
           const roleId = roleMentionMatch[1];
@@ -217,11 +224,11 @@ client.on('messageCreate', async (message) => {
       }
 
       if (adicionados === 0) {
-        return message.reply('❌ Nenhum time válido encontrado. Exemplo de uso:\n`%addteams`\n`@Time1 :emoji1:`\n`@Time2 :emoji2:`');
+        return message.reply('❌ Nenhum time válido encontrado. Certifica-te de que colocas o `@Cargo` e o emoji na mesma linha.');
       }
 
       saveDatabase();
-      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s) com sucesso! Total de times na liga: **${db.teams.length}**.`);
+      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s) com sucesso! Total de times na liga: **${db.teams.length}**. Usa \`%teams\` para ver a lista.`);
     }
 
     if (command === 'removeteam') {
