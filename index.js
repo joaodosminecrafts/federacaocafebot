@@ -59,7 +59,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages
   ],
   rest: { timeout: 60000, retries: 3 }
 });
@@ -135,7 +136,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'addteam') {
       const role = message.mentions.roles.first();
-      const emoji = args[1]; // Ex: :SPO:
+      const emoji = args[1];
 
       if (!role || !emoji) {
         return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji:`');
@@ -165,7 +166,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // ---------------------------------------------------------
-  // 3. COMANDO %sign (Contratar)
+  // 3. COMANDO %sign (Contratar via DM)
   // ---------------------------------------------------------
   if (command === 'sign') {
     if (!isCoach(member)) {
@@ -198,55 +199,71 @@ client.on('messageCreate', async (message) => {
       return message.reply(`🔋 **Elenco Cheio!** O time já possui **${currentRosterCount}/${db.rosterLimit}** jogadores.`);
     }
 
+    // Criação dos botões
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('decline_offer').setLabel('Recusar').setStyle(ButtonStyle.Danger)
     );
 
-    const sentMsg = await message.reply({
-      content: `📝 ${targetUser}, você recebeu uma proposta para entrar no time **${teamRole.name}** de ${member}!`,
-      components: [row]
-    });
+    // Envio da proposta via DM
+    try {
+      const dmMsg = await targetUser.send({
+        content: `📝 Olá ${targetUser}, você recebeu uma proposta oficial de contrato para entrar no time **${teamRole.name}** (${team.emoji}) enviada pelo coach **${member.user.username}** no servidor **${guild.name}**!`,
+        components: [row]
+      });
 
-    const collector = sentMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+      await message.reply(`📩 Proposta enviada com sucesso no privado (DM) de ${targetUser}!`);
 
-    collector.on('collect', async i => {
-      if (i.user.id !== targetUser.id) {
-        return i.reply({ content: '❌ Apenas o jogador convidado pode responder a esta proposta.', ephemeral: true });
-      }
+      const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 }); // 24h para responder
 
-      if (i.customId === 'decline_offer') {
-        await i.update({ content: `❌ ${targetUser} recusou a proposta do ${teamRole.name}.`, components: [] });
-        return;
-      }
-
-      if (i.customId === 'accept_offer') {
-        await targetMember.roles.add(teamRole);
-
-        const newRosterCount = teamRole.members.size;
-        const marketChannel = guild.channels.cache.get(db.marketChannelId);
-
-        const embed = new EmbedBuilder()
-          .setColor(0xFF0000)
-          .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
-          .setTitle('Offer Accepted')
-          .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has accepted the offer to ${team.emoji} <@&${team.roleId}>`)
-          .addFields(
-            { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
-            { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
-          );
-
-        if (marketChannel) {
-          await marketChannel.send({ embeds: [embed] });
+      collector.on('collect', async i => {
+        if (i.customId === 'decline_offer') {
+          await i.update({ content: `❌ Você recusou a proposta do **${teamRole.name}**.`, components: [] });
+          await message.channel.send(`❌ ${targetUser} recusou a proposta do **${teamRole.name}**.`);
+          return;
         }
 
-        await i.update({ content: `✅ Proposta aceita! ${targetUser} agora faz parte do **${teamRole.name}**!`, components: [] });
-      }
-    });
+        if (i.customId === 'accept_offer') {
+          // Re-checagem da janela e elenco no momento do aceite
+          if (!db.marketOpen) {
+            return i.reply({ content: '🔒 A janela de transferências fechou antes de você aceitar.', ephemeral: true });
+          }
+
+          const currentSize = teamRole.members.size;
+          if (currentSize >= db.rosterLimit) {
+            return i.reply({ content: '🔋 O time atingiu o limite de elenco antes de você aceitar.', ephemeral: true });
+          }
+
+          await targetMember.roles.add(teamRole);
+
+          const newRosterCount = teamRole.members.size;
+          const marketChannel = guild.channels.cache.get(db.marketChannelId);
+
+          const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
+            .setTitle('Offer Accepted')
+            .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has accepted the offer to ${team.emoji} <@&${team.roleId}>`)
+            .addFields(
+              { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
+              { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
+            );
+
+          if (marketChannel) {
+            await marketChannel.send({ embeds: [embed] });
+          }
+
+          await i.update({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora faz parte do **${teamRole.name}**!`, components: [] });
+        }
+      });
+
+    } catch (err) {
+      return message.reply(`❌ Não foi possível enviar mensagem privada para ${targetUser}. O jogador precisa liberar as mensagens privadas (DMs) do servidor.`);
+    }
   }
 
   // ---------------------------------------------------------
-  // 4. COMANDO %release (Soltar Jogador)
+  // 4. COMANDO %release
   // ---------------------------------------------------------
   if (command === 'release') {
     if (!isCoach(member)) {
@@ -290,7 +307,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // ---------------------------------------------------------
-  // 5. COMANDO %demand (Sair do Time)
+  // 5. COMANDO %demand
   // ---------------------------------------------------------
   if (command === 'demand') {
     const team = getUserTeam(member);
@@ -319,7 +336,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // ---------------------------------------------------------
-  // 6. COMANDO %roster (Ver Elenco)
+  // 6. COMANDO %roster
   // ---------------------------------------------------------
   if (command === 'roster') {
     const role = message.mentions.roles.first();
