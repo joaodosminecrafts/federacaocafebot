@@ -22,33 +22,40 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração de Persistência (JSON local)
+// Configuração de Persistência (JSON local robusto)
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
 let db = {
   marketOpen: true,
   marketChannelId: '', 
   rosterLimit: 20,
-  ownerRoleIds: [], // IDs dos cargos Club Owner / Assistant
-  teams: [] // { roleId, emoji }
+  ownerRoleIds: [], 
+  teams: [] 
 };
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
     try {
       const data = fs.readFileSync(DB_PATH, 'utf-8');
-      db = { ...db, ...JSON.parse(data) };
+      const parsed = JSON.parse(data);
+      db = { ...db, ...parsed };
+      console.log(`[DB] Dados carregados com sucesso! Times registados: ${db.teams.length}`);
     } catch (e) {
-      console.error('[DB] Erro ao carregar dados:', e.message);
+      console.error('[DB] Erro ao ler o ficheiro JSON, a recriar...', e.message);
+      saveDatabase();
     }
+  } else {
+    console.log('[DB] Ficheiro league_config.json não encontrado. A criar novo...');
+    saveDatabase();
   }
 }
 
 function saveDatabase() {
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    console.log(`[DB] Dados salvos com sucesso! Total de times guardados: ${db.teams.length}`);
   } catch (e) {
-    console.error('[DB] Erro ao salvar dados:', e.message);
+    console.error('[DB] Erro crítico ao salvar dados:', e.message);
   }
 }
 
@@ -146,7 +153,7 @@ client.on('messageCreate', async (message) => {
       db.teams.push({ roleId: role.id, emoji });
       saveDatabase();
 
-      return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}!`);
+      return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}! (Total de times: ${db.teams.length})`);
     }
 
     if (command === 'removeteam') {
@@ -212,10 +219,9 @@ client.on('messageCreate', async (message) => {
 
       await message.reply(`📩 Proposta enviada com sucesso no privado (DM) de ${targetUser}!`);
 
-      const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 }); // 24h
+      const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
 
       collector.on('collect', async i => {
-        // Evita erro de "o aplicativo não respondeu a tempo"
         await i.deferUpdate().catch(() => {});
 
         if (i.customId === 'decline_offer') {
@@ -234,7 +240,6 @@ client.on('messageCreate', async (message) => {
             return targetUser.send('🔋 O time atingiu o limite máximo de elenco antes de você aceitar.').catch(() => {});
           }
 
-          // Adiciona o cargo no servidor principal
           await targetMember.roles.add(teamRole).catch(err => console.error('Erro ao dar cargo:', err));
 
           const newRosterCount = teamRole.members.size;
