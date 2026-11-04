@@ -11,7 +11,7 @@ const {
 const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
 const fs = require('fs');
-const path = path = require('path');
+const path = require('path');
 
 // Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout do Render
 setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
