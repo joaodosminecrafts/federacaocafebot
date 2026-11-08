@@ -22,16 +22,68 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração de Persistência (JSON local robusto)
+// Configuração de Persistência com a Lista Completa de Todos os Times
 const DB_PATH = path.join(__dirname, 'league_config.json');
+
+const DEFAULT_TEAMS = [
+  // First Division
+  { roleId: '1564789698206105710', emoji: '<:LDU:1564774805000028200>' },
+  { roleId: '1564785716544798840', emoji: '<:ATL:1564783248045899919>' },
+  { roleId: '1564786818908422296', emoji: '<:BOT:1564775109930123284>' },
+  { roleId: '1564786169970032780', emoji: '<:SAN:1564775453905129563>' },
+  { roleId: '1564785981121626263', emoji: '<:FLA:1564775631441629204>' },
+  { roleId: '1564785871188795452', emoji: '<:PAL:1564780090271731792>' },
+  { roleId: '1564787632259473418', emoji: '<:BOC:1564780041076867192>' },
+  { roleId: '1564787003944341554', emoji: '<:RIV:1564783161060098169>' },
+  { roleId: '1564789215139594461', emoji: '<:BAR:1564783200096624660>' },
+  { roleId: '1566819434943873034', emoji: '<:FLU:1560387904792961106>' },
+
+  // Second Division
+  { roleId: '1564786340976005302', emoji: '<:INT:1564774876743602318>' },
+  { roleId: '1564787980995133630', emoji: '<:COL:1564775004585992332>' },
+  { roleId: '1564786650893258902', emoji: '<:VAS:1564783286843088978>' },
+  { roleId: '1564786498123866366', emoji: '<:NAC:1564775403753701406>' },
+  { roleId: '1564786209216135289', emoji: '<:SAO:1564775509139918858>' },
+  { roleId: '1564785794961383606', emoji: '<:COR:1564775743399927898>' },
+  { roleId: '1564787552240541777', emoji: '<:PEN:1564784455980159037>' },
+  { roleId: '1564786436539154574', emoji: '<:GRE:1564775847385108490>' },
+
+  // Third Division
+  { roleId: '1564789481452863640', emoji: '<:ARG:1564779767796994109>' },
+  { roleId: '1564786079452766248', emoji: '<:SPOR:1564774740474990643>' },
+  { roleId: '1564788212193435768', emoji: '<:CER:1564779984424411486>' },
+  { roleId: '1564787179698528358', emoji: '<:UNV:1564779922872860893>' },
+  { roleId: '1564788393756467350', emoji: '<:ALL:1564779850143637564>' },
+  { roleId: '1564787319850934372', emoji: '<:EST:1564775346300264538>' },
+  { roleId: '1564787439585726565', emoji: '<:LAN:1564775555096645733>' },
+  { roleId: '1565211049618309191', emoji: '<:BOL:1565211446902526103>' },
+
+  // Champions League
+  { roleId: '1566286333637562419', emoji: '<:RMA:1566280843985420338>' },
+  { roleId: '1566286621425541270', emoji: '<:BAR:1566279808277553232>' },
+  { roleId: '1566286802527060058', emoji: '<:PSG:1566282052561674270>' },
+  { roleId: '1566286996287000586', emoji: '<:ARS:1566279585820180500>' },
+  { roleId: '1566287128982327306', emoji: '<:CITY:1566280933496324096>' },
+  { roleId: '1566287273157337148', emoji: '<:MAN:1566280260864049213>' },
+  { roleId: '1566287470046347344', emoji: '<:BAY:1566279844105297940>' },
+  { roleId: '1566287719124967474', emoji: '<:AMI:1566282529240125581>' },
+  { roleId: '1566287936993890354', emoji: '<:INT:1566280059214372865>' },
+  { roleId: '1566288125976649889', emoji: '<:POR:1566280308125339849>' },
+  { roleId: '1566288328813449246', emoji: '<:SPO:1566280895499993271>' },
+  { roleId: '1566288589505953842', emoji: '<:AST:1566279711888384040>' },
+  { roleId: '1566288786160361583', emoji: '<:BOR:1566279878058446939>' },
+  { roleId: '1566288909481017354', emoji: '<:GAL:1566281432261730335>' },
+  { roleId: '1566289147348656218', emoji: '<:LILL:1566281471889645698>' },
+  { roleId: '1566289297156603924', emoji: '<:LVP:1566281511622287440>' }
+];
 
 let db = {
   marketOpen: true,
   marketChannelId: '', 
-  faChannelId: '', // Canal exclusivo para Free Agency
+  faChannelId: '', 
   rosterLimit: 20,
   ownerRoleIds: [], 
-  teams: [] 
+  teams: DEFAULT_TEAMS
 };
 
 function loadDatabase() {
@@ -40,13 +92,15 @@ function loadDatabase() {
       const data = fs.readFileSync(DB_PATH, 'utf-8');
       const parsed = JSON.parse(data);
       db = { ...db, ...parsed };
-      console.log(`[DB] Dados carregados com sucesso! Times registados: ${db.teams.length}`);
+      if (!db.teams || db.teams.length === 0) db.teams = DEFAULT_TEAMS;
+      console.log(`[DB] Dados carregados com sucesso! Times registrados: ${db.teams.length}`);
     } catch (e) {
-      console.error('[DB] Erro ao ler o ficheiro JSON, a recriar...', e.message);
+      console.error('[DB] Erro ao ler JSON, restaurando padrões...', e.message);
+      db.teams = DEFAULT_TEAMS;
       saveDatabase();
     }
   } else {
-    console.log('[DB] Ficheiro league_config.json não encontrado. A criar novo...');
+    console.log('[DB] league_config.json não encontrado. Criando novo com times padrão...');
     saveDatabase();
   }
 }
@@ -56,7 +110,7 @@ function saveDatabase() {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
     console.log(`[DB] Dados salvos com sucesso! Total de times guardados: ${db.teams.length}`);
   } catch (e) {
-    console.error('[DB] Erro crítico ao salvar dados:', e.message);
+    console.error('[DB] Erro ao salvar dados:', e.message);
   }
 }
 
@@ -77,7 +131,6 @@ client.once('ready', () => {
   console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
 });
 
-// Funções Auxiliares
 function getUserTeam(member) {
   return db.teams.find(t => member.roles.cache.has(t.roleId));
 }
@@ -87,24 +140,21 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
-// Manipulador de Mensagens
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  // =========================================================
-  // COMANDOS COM PREFIXO "!" (FREE AGENCY)
-  // =========================================================
+  // COMANDO DE FREE AGENCY (!)
   if (message.content.startsWith('!')) {
     const argsFA = message.content.slice(1).trim().split(/ +/);
     const commandFA = argsFA.shift().toLowerCase();
 
     if (commandFA === 'freeagency' || commandFA === 'fa') {
       const marketMsg = argsFA.join(' ');
-      if (!marketMsg) return message.reply('❌ Insere a tua mensagem. Ex: `!freeagency Procuro time de atacante`');
+      if (!marketMsg) return message.reply('❌ Digite a sua mensagem. Ex: `!freeagency Procuro time de atacante`');
 
       const faChannel = message.guild.channels.cache.get(db.faChannelId);
       if (!faChannel) {
-        return message.reply('❌ Canal de Free Agency não configurado pela administração! (Use `%setfachannel #canal`)');
+        return message.reply('❌ Canal de Free Agency não configurado! (Use `%setfachannel #canal`)');
       }
 
       const embed = new EmbedBuilder()
@@ -115,13 +165,11 @@ client.on('messageCreate', async (message) => {
         .setTimestamp();
 
       await faChannel.send({ embeds: [embed] });
-      return message.reply('✅ O teu anúncio de Free Agent foi enviado com sucesso no canal de Free Agency!');
+      return message.reply('✅ Seu anúncio de Free Agent foi enviado com sucesso!');
     }
   }
 
-  // =========================================================
-  // COMANDOS COM PREFIXO "%" (LIGA E GESTÃO)
-  // =========================================================
+  // COMANDOS DE GESTÃO E LIGA (%)
   if (!message.content.startsWith('%')) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
@@ -129,9 +177,7 @@ client.on('messageCreate', async (message) => {
   const member = message.member;
   const guild = message.guild;
 
-  // ---------------------------------------------------------
-  // 1. CONFIGURAÇÕES DA LIGA (APENAS ADMINS)
-  // ---------------------------------------------------------
+  // CONFIGURAÇÕES (ADMIN)
   if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam'].includes(command)) {
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas Administradores podem usar este comando.');
@@ -140,7 +186,7 @@ client.on('messageCreate', async (message) => {
     if (command === 'abrirjanela') {
       db.marketOpen = true;
       saveDatabase();
-      return message.reply('🔓 **Janela de transferências ABERTA com sucesso!**');
+      return message.reply('🔓 **Janela de transferências ABERTA!**');
     }
 
     if (command === 'fecharjanela') {
@@ -151,15 +197,15 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setmarketchannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Menciona um canal válido. Ex: `%setmarketchannel #transfer-market`');
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setmarketchannel #transfer-market`');
       db.marketChannelId = channel.id;
       saveDatabase();
-      return message.reply(`✅ Canal de anúncios de transferências definido para: ${channel}`);
+      return message.reply(`✅ Canal de transferências definido para: ${channel}`);
     }
 
     if (command === 'setfachannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Menciona um canal válido. Ex: `%setfachannel #free-agency`');
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setfachannel #free-agency`');
       db.faChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de Free Agency definido para: ${channel}`);
@@ -167,33 +213,30 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setrosterlimit') {
       const limit = parseInt(args[0]);
-      if (isNaN(limit)) return message.reply('❌ Insere um número válido. Ex: `%setrosterlimit 20`');
+      if (isNaN(limit)) return message.reply('❌ Digite um número válido. Ex: `%setrosterlimit 20`');
       db.rosterLimit = limit;
       saveDatabase();
-      return message.reply(`✅ Limite de elenco (Roster Cap) definido para **${limit}**.`);
+      return message.reply(`✅ Limite de elenco definido para **${limit}**.`);
     }
 
     if (command === 'setownercargos') {
       const roles = message.mentions.roles.map(r => r.id);
-      if (roles.length === 0) return message.reply('❌ Menciona pelo menos um cargo. Ex: `%setownercargos @ClubOwner @Assistant`');
+      if (roles.length === 0) return message.reply('❌ Mencione pelo menos um cargo.');
       db.ownerRoleIds = roles;
       saveDatabase();
-      return message.reply('✅ Cargos de gestão configurados com sucesso!');
+      return message.reply('✅ Cargos de gestão configurados!');
     }
 
     if (command === 'addteam') {
       const role = message.mentions.roles.first();
       const emoji = args[1];
 
-      if (!role || !emoji) {
-        return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji:`');
-      }
+      if (!role || !emoji) return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji:`');
 
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       db.teams.push({ roleId: role.id, emoji });
       saveDatabase();
-
-      return message.reply(`✅ Time ${role} adicionado com sucesso com o emoji ${emoji}! (Total de times: ${db.teams.length})`);
+      return message.reply(`✅ Time ${role} adicionado com o emoji ${emoji}!`);
     }
 
     if (command === 'addteams') {
@@ -219,62 +262,46 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      if (adicionados === 0) {
-        return message.reply('❌ Nenhum time válido encontrado. Certifica-te de que colocas o `@Cargo` e o emoji na mesma linha.');
-      }
+      if (adicionados === 0) return message.reply('❌ Nenhum time válido encontrado.');
 
       saveDatabase();
-      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s) com sucesso! Total de times na liga: **${db.teams.length}**. Usa \`%teams\` para ver a lista.`);
+      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s)! Total: **${db.teams.length}**.`);
     }
 
     if (command === 'removeteam') {
       const role = message.mentions.roles.first();
-      if (!role) return message.reply('❌ Menciona o cargo do time a remover. Ex: `%removeteam @Time`');
+      if (!role) return message.reply('❌ Mencione o cargo do time a remover.');
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       saveDatabase();
-      return message.reply(`🗑️ Time ${role} removido do sistema.`);
+      return message.reply(`🗑️ Time ${role} removido.`);
     }
   }
 
-  // ---------------------------------------------------------
-  // 2. VALIDAÇÃO DE JANELA FECHADA
-  // ---------------------------------------------------------
+  // VALIDAÇÃO DE MERCADO
   if (['sign', 'release', 'demand'].includes(command) && !db.marketOpen) {
-    return message.reply('🔒 **Mercado Fechado!**\nA janela de transferências está fechada no momento. Aguarde a abertura oficial da administração.');
+    return message.reply('🔒 **Mercado Fechado!**');
   }
 
-  // ---------------------------------------------------------
-  // 3. COMANDO %sign (Contratar via DM)
-  // ---------------------------------------------------------
+  // COMANDO %sign
   if (command === 'sign') {
-    if (!isCoach(member)) {
-      return message.reply('❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem fazer ofertas.');
-    }
+    if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem fazer ofertas.');
 
     const team = getUserTeam(member);
-    if (!team) {
-      return message.reply('❌ Você não pertence a nenhum time cadastrado no bot.');
-    }
+    if (!team) return message.reply('❌ Você não pertence a nenhum time cadastrado.');
 
     const targetUser = message.mentions.users.first();
-    if (!targetUser) {
-      return message.reply('❌ Menciona o jogador que pretendes contratar. Ex: `%sign @Jogador`');
-    }
+    if (!targetUser) return message.reply('❌ Mencione o jogador que deseja contratar.');
 
     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember || targetUser.bot) {
-      return message.reply('❌ Jogador inválido.');
-    }
+    if (!targetMember || targetUser.bot) return message.reply('❌ Jogador inválido.');
 
-    if (getUserTeam(targetMember)) {
-      return message.reply(`⚠️ O jogador ${targetUser} já pertence a uma equipe!`);
-    }
+    if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador ${targetUser} já pertence a uma equipe!`);
 
     const teamRole = guild.roles.cache.get(team.roleId);
     const currentRosterCount = teamRole ? teamRole.members.size : 0;
 
     if (currentRosterCount >= db.rosterLimit) {
-      return message.reply(`🔋 **Elenco Cheio!** O time já possui **${currentRosterCount}/${db.rosterLimit}** jogadores.`);
+      return message.reply(`🔋 **Elenco Cheio!** (${currentRosterCount}/${db.rosterLimit})`);
     }
 
     const row = new ActionRowBuilder().addComponents(
@@ -284,11 +311,11 @@ client.on('messageCreate', async (message) => {
 
     try {
       const dmMsg = await targetUser.send({
-        content: `📝 Olá ${targetUser}, você recebeu uma proposta oficial de contrato para entrar no time **${teamRole.name}** (${team.emoji}) enviada pelo coach **${member.user.username}** no servidor **${guild.name}**!`,
+        content: `📝 Olá ${targetUser}, você recebeu uma proposta oficial para entrar no **${teamRole.name}** (${team.emoji}) enviada por **${member.user.username}**!`,
         components: [row]
       });
 
-      await message.reply(`📩 Proposta enviada com sucesso no privado (DM) de ${targetUser}!`);
+      await message.reply(`📩 Proposta enviada no privado de ${targetUser}!`);
 
       const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
 
@@ -302,14 +329,8 @@ client.on('messageCreate', async (message) => {
         }
 
         if (i.customId === 'accept_offer') {
-          if (!db.marketOpen) {
-            return targetUser.send('🔒 A janela de transferências fechou antes de você aceitar.').catch(() => {});
-          }
-
-          const currentSize = teamRole.members.size;
-          if (currentSize >= db.rosterLimit) {
-            return targetUser.send('🔋 O time atingiu o limite máximo de elenco antes de você aceitar.').catch(() => {});
-          }
+          if (!db.marketOpen) return targetUser.send('🔒 A janela fechou antes de você aceitar.').catch(() => {});
+          if (teamRole.members.size >= db.rosterLimit) return targetUser.send('🔋 O time lotou antes de você aceitar.').catch(() => {});
 
           await targetMember.roles.add(teamRole).catch(err => console.error('Erro ao dar cargo:', err));
 
@@ -326,40 +347,30 @@ client.on('messageCreate', async (message) => {
               { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
             );
 
-          if (marketChannel) {
-            await marketChannel.send({ embeds: [embed] }).catch(() => {});
-          }
+          if (marketChannel) await marketChannel.send({ embeds: [embed] }).catch(() => {});
 
-          await dmMsg.edit({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora faz parte do **${teamRole.name}**!`, components: [] }).catch(() => {});
+          await dmMsg.edit({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora é do **${teamRole.name}**!`, components: [] }).catch(() => {});
         }
       });
 
     } catch (err) {
-      return message.reply(`❌ Não foi possível enviar mensagem privada para ${targetUser}. O jogador precisa liberar as mensagens privadas (DMs) do servidor.`);
+      return message.reply(`❌ Não foi possível enviar DM para ${targetUser}. O jogador precisa liberar as mensagens privadas.`);
     }
   }
 
-  // ---------------------------------------------------------
-  // 4. COMANDO %release
-  // ---------------------------------------------------------
+  // COMANDO %release
   if (command === 'release') {
-    if (!isCoach(member)) {
-      return message.reply('❌ Apenas membros com cargo de **Club Owner** ou **Assistant** podem dispensar jogadores.');
-    }
+    if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem dispensar.');
 
     const team = getUserTeam(member);
-    if (!team) {
-      return message.reply('❌ Você não pertence a nenhum time cadastrado.');
-    }
+    if (!team) return message.reply('❌ Você não pertence a nenhum time cadastrado.');
 
     const targetUser = message.mentions.users.first();
-    if (!targetUser) {
-      return message.reply('❌ Menciona o jogador que pretendes dispensar. Ex: `%release @Jogador`');
-    }
+    if (!targetUser) return message.reply('❌ Mencione o jogador a dispensar.');
 
     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember || !targetMember.roles.cache.has(team.roleId)) {
-      return message.reply('❌ O jogador informado não pertence ao seu time.');
+      return message.reply('❌ O jogador não pertence ao seu time.');
     }
 
     const teamRole = guild.roles.cache.get(team.roleId);
@@ -383,14 +394,10 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ ${targetUser} foi dispensado com sucesso.`);
   }
 
-  // ---------------------------------------------------------
-  // 5. COMANDO %demand
-  // ---------------------------------------------------------
+  // COMANDO %demand
   if (command === 'demand') {
     const team = getUserTeam(member);
-    if (!team) {
-      return message.reply('❌ Você não pertence a nenhum time no momento.');
-    }
+    if (!team) return message.reply('❌ Você não pertence a nenhum time.');
 
     const teamRole = guild.roles.cache.get(team.roleId);
     await member.roles.remove(teamRole);
@@ -412,12 +419,10 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`);
   }
 
-  // ---------------------------------------------------------
-  // 6. COMANDO %roster
-  // ---------------------------------------------------------
+  // COMANDO %roster
   if (command === 'roster') {
     const role = message.mentions.roles.first();
-    if (!role) return message.reply('❌ Menciona o cargo do time. Ex: `%roster @Sport Recife`');
+    if (!role) return message.reply('❌ Mencione o cargo do time.');
 
     const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
 
@@ -430,13 +435,9 @@ client.on('messageCreate', async (message) => {
     return message.reply({ embeds: [embed] });
   }
 
-  // ---------------------------------------------------------
-  // 7. COMANDO %teams OU %times (Listar todos os times)
-  // ---------------------------------------------------------
+  // COMANDO %teams
   if (command === 'teams' || command === 'times') {
-    if (db.teams.length === 0) {
-      return message.reply('📋 Nenhum time cadastrado no momento.');
-    }
+    if (db.teams.length === 0) return message.reply('📋 Nenhum time cadastrado.');
 
     const lista = db.teams.map((t, index) => {
       const role = guild.roles.cache.get(t.roleId);
