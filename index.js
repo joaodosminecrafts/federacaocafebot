@@ -82,7 +82,7 @@ let db = {
   marketChannelId: '', 
   faChannelId: '', 
   blacklistChannelId: '', 
-  commandsChannelId: '', // Canal Permitido para Comandos Gerais
+  commandsChannelId: '', 
   rosterLimit: 20,
   ownerRoleIds: [], 
   teams: DEFAULT_TEAMS
@@ -142,6 +142,14 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
+// Validação se o usuário tem cargo de Staff, Dono ou Admin
+function isStaffOrOwner(member) {
+  if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+  const staffRoleId = '1527141858239709234';
+  const ownerRoleId = '1526639797920075936';
+  return member.roles.cache.has(staffRoleId) || member.roles.cache.has(ownerRoleId);
+}
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
@@ -150,18 +158,18 @@ client.on('messageCreate', async (message) => {
 
   if (!isCmdPercent && !isCmdExclamation) return;
 
-  // FILTRO DE CANAL DE COMANDOS (Comandos de Admin como %setcommandschannel ignoram a trava)
   const argsCheck = message.content.slice(1).trim().split(/ +/);
   const cmdCheck = argsCheck.shift().toLowerCase();
-  const isAdminCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel'].includes(cmdCheck);
+  
+  // Comandos que ignoram a restrição de canal de comandos comum
+  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack'].includes(cmdCheck);
 
-  if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminCmd) {
+  if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd) {
     const targetChannel = message.guild.channels.cache.get(db.commandsChannelId);
     const channelMention = targetChannel ? `${targetChannel}` : 'no canal correto';
 
     const tempMsg = await message.reply(`⚠️ Você só pode usar comandos em ${channelMention}!`);
     
-    // Apaga a mensagem enviada pelo usuário e a mensagem de aviso após 5 segundos
     setTimeout(() => {
       message.delete().catch(() => {});
       tempMsg.delete().catch(() => {});
@@ -195,16 +203,17 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // COMANDOS DE GESTÃO E LIGA (%)
   const args = message.content.slice(1).trim().split(/ +/);
   const command = args.shift().toLowerCase();
   const member = message.member;
   const guild = message.guild;
 
-  // CONFIGURAÇÕES (ADMIN)
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black'].includes(command)) {
-    if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('❌ Apenas Administradores podem usar este comando.');
+  // COMANDOS DE ADMINISTRAÇÃO E STAFF (%black e %unblack livres para Staff/Dono)
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack'].includes(command)) {
+    
+    // Verifica permissão (Admin, Staff ou Dono)
+    if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
+      return message.reply('❌ Apenas Administradores ou membros da Staff/Donos podem usar este comando.');
     }
 
     if (command === 'setcommandschannel') {
@@ -316,7 +325,77 @@ client.on('messageCreate', async (message) => {
       }
 
       await blacklistChannel.send({ embeds: [embed] });
-      return message.reply(`✅ Registrado em ${blacklistChannel}!`);
+
+      try {
+        await guild.members.ban(targetUser.id, { 
+          deleteMessageSeconds: 3600, 
+          reason: `Blacklist: ${motivoVal} | Aplicado por: ${message.author.tag}` 
+        });
+        return message.reply(`✅ Registrado em ${blacklistChannel} e **${targetUser.tag} foi banido**!`);
+      } catch (err) {
+        console.error('Erro ao banir membro:', err);
+        return message.reply(`✅ Registrado em ${blacklistChannel}, mas ⚠️ **não foi possível banir o usuário** (verifique os cargos).`);
+      }
+    }
+
+    // COMANDO %unblack
+    if (command === 'unblack') {
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        return message.reply('❌ Mencione o jogador. Ex: `%unblack @docarabanido C Pagou`');
+      }
+
+      const nonMentionArgs = args.filter(a => !a.startsWith('<@'));
+      if (nonMentionArgs.length < 2) {
+        return message.reply('❌ Formato incorreto! Uso: `%unblack @usuario [C/F] [Estado]` (Ex: `%unblack @docarabanido C Pagou`)');
+      }
+
+      const statusLetter = nonMentionArgs.shift().toUpperCase();
+      const statusText = nonMentionArgs.join(' ');
+
+      const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
+      if (!blacklistChannel) {
+        return message.reply('❌ Canal de Blacklist não configurado! Use `%setblacklistchannel #canal` primeiro.');
+      }
+
+      let emojiStatus = '';
+      let estadoFinal = '';
+
+      if (statusLetter === 'C') {
+        emojiStatus = '✅';
+        estadoFinal = statusText.toLowerCase() === 'pagou' ? 'Retirada.' : statusText;
+      } else {
+        emojiStatus = '❌';
+        estadoFinal = statusText;
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x2B2D31)
+        .setTitle('☕ | Ban Appeal')
+        .setDescription(
+          `**Usuário:** ${targetUser.username}\n` +
+          `**Estado:** ${emojiStatus} ${estadoFinal}`
+        )
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
+        .setFooter({ 
+          text: 'Prezando por uma comunidade melhor.', 
+          iconURL: guild.iconURL({ dynamic: true, size: 128 }) 
+        });
+
+      await blacklistChannel.send({ embeds: [embed] });
+
+      // Se for C (Correto / Pagou), remove o banimento do usuário automaticamente
+      if (statusLetter === 'C') {
+        try {
+          await guild.members.unban(targetUser.id, `Ban Appeal Aprovada: ${estadoFinal}`);
+          return message.reply(`✅ Apelação registrada em ${blacklistChannel} e **${targetUser.tag} foi desbanido** com sucesso!`);
+        } catch (err) {
+          console.error('Erro ao desbanir membro:', err);
+          return message.reply(`✅ Apelação registrada em ${blacklistChannel}, mas ⚠️ **não foi possível desbanir o usuário** (ele pode já não estar banido).`);
+        }
+      } else {
+        return message.reply(`✅ Apelação registrada (Negada) em ${blacklistChannel}!`);
+      }
     }
 
     if (command === 'setrosterlimit') {
@@ -527,7 +606,7 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`);
   }
 
-  // COMANDO %roster ATUALIZADO (Busca todos os membros do cargo)
+  // COMANDO %roster ATUALIZADO
   if (command === 'roster') {
     const role = message.mentions.roles.first();
     if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `%roster @Time`');
