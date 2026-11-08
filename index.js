@@ -142,7 +142,6 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
-// Validação se o usuário tem cargo de Staff, Dono ou Admin
 function isStaffOrOwner(member) {
   if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
   const staffRoleId = '1527141858239709234';
@@ -161,7 +160,6 @@ client.on('messageCreate', async (message) => {
   const argsCheck = message.content.slice(1).trim().split(/ +/);
   const cmdCheck = argsCheck.shift().toLowerCase();
   
-  // Comandos que ignoram a restrição de canal de comandos comum
   const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack'].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd) {
@@ -177,7 +175,6 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // COMANDO DE FREE AGENCY (!)
   if (isCmdExclamation) {
     const argsFA = message.content.slice(1).trim().split(/ +/);
     const commandFA = argsFA.shift().toLowerCase();
@@ -208,10 +205,8 @@ client.on('messageCreate', async (message) => {
   const member = message.member;
   const guild = message.guild;
 
-  // COMANDOS DE ADMINISTRAÇÃO E STAFF (%black e %unblack livres para Staff/Dono)
   if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack'].includes(command)) {
     
-    // Verifica permissão (Admin, Staff ou Dono)
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores ou membros da Staff/Donos podem usar este comando.');
     }
@@ -260,14 +255,19 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Canal de Blacklists definido para: ${channel}`);
     }
 
-    // COMANDO %black
+    // COMANDO %black CORRIGIDO
     if (command === 'black') {
-      const targetUser = message.mentions.users.first();
-      if (!targetUser) {
-        return message.reply('❌ Mencione o jogador. Ex: `%black @usuario Motivo Tempo Robux Pix`');
+      let targetUser = message.mentions.users.first();
+      if (!targetUser && args[0]) {
+        const cleanId = args[0].replace(/[<@!>]/g, '');
+        targetUser = await client.users.fetch(cleanId).catch(() => null);
       }
 
-      const nonMentionArgs = args.filter(a => !a.startsWith('<@'));
+      if (!targetUser) {
+        return message.reply('❌ Mencione o jogador corretamente. Ex: `%black @usuario Motivo Tempo Robux Pix`');
+      }
+
+      const nonMentionArgs = args.filter(a => !a.includes(targetUser.id) && !a.startsWith('<@'));
       if (nonMentionArgs.length < 3) {
         return message.reply('❌ Formato incorreto! Uso: `%black @docara Motivo... Tempo Robux Pix` (Ex: `%black @docara Racismo até a GW7 100 5`)');
       }
@@ -338,14 +338,19 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // COMANDO %unblack
+    // COMANDO %unblack CORRIGIDO
     if (command === 'unblack') {
-      const targetUser = message.mentions.users.first();
+      let targetUser = message.mentions.users.first();
+      if (!targetUser && args[0]) {
+        const cleanId = args[0].replace(/[<@!>]/g, '');
+        targetUser = await client.users.fetch(cleanId).catch(() => null);
+      }
+
       if (!targetUser) {
         return message.reply('❌ Mencione o jogador. Ex: `%unblack @docarabanido C Pagou`');
       }
 
-      const nonMentionArgs = args.filter(a => !a.startsWith('<@'));
+      const nonMentionArgs = args.filter(a => !a.includes(targetUser.id) && !a.startsWith('<@'));
       if (nonMentionArgs.length < 2) {
         return message.reply('❌ Formato incorreto! Uso: `%unblack @usuario [C/F] [Estado]` (Ex: `%unblack @docarabanido C Pagou`)');
       }
@@ -384,7 +389,6 @@ client.on('messageCreate', async (message) => {
 
       await blacklistChannel.send({ embeds: [embed] });
 
-      // Se for C (Correto / Pagou), remove o banimento do usuário automaticamente
       if (statusLetter === 'C') {
         try {
           await guild.members.unban(targetUser.id, `Ban Appeal Aprovada: ${estadoFinal}`);
@@ -606,7 +610,7 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`);
   }
 
-  // COMANDO %roster ATUALIZADO
+  // COMANDO %roster
   if (command === 'roster') {
     const role = message.mentions.roles.first();
     if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `%roster @Time`');
