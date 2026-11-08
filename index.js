@@ -6,10 +6,8 @@ const {
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle, 
-  ComponentType,
-  AttachmentBuilder 
+  ComponentType 
 } = require('discord.js');
-const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
 const fs = require('fs');
@@ -207,47 +205,6 @@ client.on('messageCreate', async (message) => {
   const member = message.member;
   const guild = message.guild;
 
-  // COMANDO %carta (Gera a carta Ultimate Team com @napi-rs/canvas)
-  if (command === 'carta') {
-    const targetUser = message.mentions.users.first() || message.author;
-    
-    const rating = args[1] || '80';
-    const position = args[2] || 'ST';
-
-    await message.channel.send('🎨 A gerar a carta de Ultimate Team, aguarde um momento...');
-
-    try {
-      const canvas = createCanvas(800, 1200);
-      const ctx = canvas.getContext('2d');
-
-      const background = await loadImage('./assets/card_base.png');
-      ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-
-      const avatarURL = targetUser.displayAvatarURL({ extension: 'png', size: 512 });
-      const avatar = await loadImage(avatarURL);
-      ctx.drawImage(avatar, 250, 300, 300, 300);
-
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 80px sans-serif';
-      ctx.fillText(rating, 100, 180);
-
-      ctx.font = 'bold 50px sans-serif';
-      ctx.fillText(position, 100, 240);
-
-      ctx.font = 'bold 60px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(targetUser.username, canvas.width / 2, 850);
-
-      const buffer = canvas.toBuffer('image/png');
-      const attachment = new AttachmentBuilder(buffer, { name: 'fut_card.png' });
-
-      return message.reply({ files: [attachment] });
-    } catch (error) {
-      console.error('Erro ao gerar carta:', error);
-      return message.reply('❌ Ocorreu um erro ao gerar a imagem da carta (verifique se o ficheiro assets/card_base.png existe).');
-    }
-  }
-
   if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack'].includes(command)) {
     
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
@@ -298,7 +255,7 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Canal de Blacklists definido para: ${channel}`);
     }
 
-    // COMANDO %black
+    // COMANDO %black CORRIGIDO
     if (command === 'black') {
       let targetUser = message.mentions.users.first();
       if (!targetUser && args[0]) {
@@ -381,7 +338,7 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // COMANDO %unblack
+    // COMANDO %unblack CORRIGIDO
     if (command === 'unblack') {
       let targetUser = message.mentions.users.first();
       if (!targetUser && args[0]) {
