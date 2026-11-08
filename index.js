@@ -81,6 +81,7 @@ let db = {
   marketOpen: true,
   marketChannelId: '', 
   faChannelId: '', 
+  blacklistChannelId: '', // Canal de Blacklist
   rosterLimit: 20,
   ownerRoleIds: [], 
   teams: DEFAULT_TEAMS
@@ -178,7 +179,7 @@ client.on('messageCreate', async (message) => {
   const guild = message.guild;
 
   // CONFIGURAÇÕES (ADMIN)
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black'].includes(command)) {
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas Administradores podem usar este comando.');
     }
@@ -209,6 +210,86 @@ client.on('messageCreate', async (message) => {
       db.faChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de Free Agency definido para: ${channel}`);
+    }
+
+    if (command === 'setblacklistchannel') {
+      const channel = message.mentions.channels.first();
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setblacklistchannel #blacklists`');
+      db.blacklistChannelId = channel.id;
+      saveDatabase();
+      return message.reply(`✅ Canal de Blacklists definido para: ${channel}`);
+    }
+
+    // COMANDO %black
+    if (command === 'black') {
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        return message.reply('❌ Mencione o jogador. Ex: `%black @usuario Motivo Tempo Robux Pix`');
+      }
+
+      // Procura pelo menos 3 parâmetros após a menção do usuário (Tempo, Robux e Pix)
+      const nonMentionArgs = args.filter(a => !a.startsWith('<@'));
+      if (nonMentionArgs.length < 3) {
+        return message.reply('❌ Formato incorreto! Uso: `%black @docara Motivo... Tempo Robux Pix` (Ex: `%black @docara Racismo até a GW7 100 5`)');
+      }
+
+      const pixVal = nonMentionArgs.pop();
+      const robuxVal = nonMentionArgs.pop();
+      
+      let remainingText = nonMentionArgs.join(' ');
+      let tempoVal = '';
+      let motivoVal = '';
+
+      // Tenta separar o tempo do motivo procurando palavras como "até", "gw", "dias", "permanente"
+      const tempoMatch = remainingText.match(/(até\s+.*|gw\d+|permanente|\d+\s*dias?)/i);
+
+      if (tempoMatch) {
+        tempoVal = tempoMatch[0];
+        motivoVal = remainingText.replace(tempoMatch[0], '').trim();
+      } else {
+        // Fallback: assume a última palavra como tempo se não encontrar o padrão
+        const lastSpace = remainingText.lastIndexOf(' ');
+        if (lastSpace !== -1) {
+          motivoVal = remainingText.substring(0, lastSpace).trim();
+          tempoVal = remainingText.substring(lastSpace + 1).trim();
+        } else {
+          motivoVal = remainingText;
+          tempoVal = 'Não especificado';
+        }
+      }
+
+      if (!motivoVal) motivoVal = 'Não especificado';
+
+      const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
+      if (!blacklistChannel) {
+        return message.reply('❌ Canal de Blacklist não configurado! Use `%setblacklistchannel #canal` primeiro.');
+      }
+
+      const robuxEmoji = '<:robux:1553191661545193603>';
+      const pixEmoji = '<:pix:1560853388034445485>';
+
+      const embed = new EmbedBuilder()
+        .setColor(0x2B2D31)
+        .setDescription(
+          `**Nick:** ${targetUser}\n` +
+          `**Motivo:** ${motivoVal}\n` +
+          `**Tempo:** ${tempoVal}\n` +
+          `**Bail:** ${robuxVal} ${robuxEmoji} ${pixVal} ${pixEmoji}`
+        )
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
+        .setFooter({ 
+          text: 'Prezando por uma comunidade melhor.', 
+          iconURL: guild.iconURL({ dynamic: true, size: 128 }) 
+        });
+
+      // Verifica se a mensagem veio com uma imagem anexada (prova)
+      const attachment = message.attachments.first();
+      if (attachment && attachment.contentType && attachment.contentType.startsWith('image/')) {
+        embed.setImage(attachment.url);
+      }
+
+      await blacklistChannel.send({ embeds: [embed] });
+      return message.reply(`✅ Registrado em ${blacklistChannel}!`);
     }
 
     if (command === 'setrosterlimit') {
