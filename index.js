@@ -81,7 +81,8 @@ let db = {
   marketOpen: true,
   marketChannelId: '', 
   faChannelId: '', 
-  blacklistChannelId: '', // Canal de Blacklist
+  blacklistChannelId: '', 
+  commandsChannelId: '', // Canal Permitido para Comandos Gerais
   rosterLimit: 20,
   ownerRoleIds: [], 
   teams: DEFAULT_TEAMS
@@ -144,8 +145,32 @@ function isCoach(member) {
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
+  const isCmdPercent = message.content.startsWith('%');
+  const isCmdExclamation = message.content.startsWith('!');
+
+  if (!isCmdPercent && !isCmdExclamation) return;
+
+  // FILTRO DE CANAL DE COMANDOS (Comandos de Admin como %setcommandschannel ignoram a trava)
+  const argsCheck = message.content.slice(1).trim().split(/ +/);
+  const cmdCheck = argsCheck.shift().toLowerCase();
+  const isAdminCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel'].includes(cmdCheck);
+
+  if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminCmd) {
+    const targetChannel = message.guild.channels.cache.get(db.commandsChannelId);
+    const channelMention = targetChannel ? `${targetChannel}` : 'no canal correto';
+
+    const tempMsg = await message.reply(`⚠️ Você só pode usar comandos em ${channelMention}!`);
+    
+    // Apaga a mensagem enviada pelo usuário e a mensagem de aviso após 5 segundos
+    setTimeout(() => {
+      message.delete().catch(() => {});
+      tempMsg.delete().catch(() => {});
+    }, 5000);
+    return;
+  }
+
   // COMANDO DE FREE AGENCY (!)
-  if (message.content.startsWith('!')) {
+  if (isCmdExclamation) {
     const argsFA = message.content.slice(1).trim().split(/ +/);
     const commandFA = argsFA.shift().toLowerCase();
 
@@ -171,17 +196,23 @@ client.on('messageCreate', async (message) => {
   }
 
   // COMANDOS DE GESTÃO E LIGA (%)
-  if (!message.content.startsWith('%')) return;
-
   const args = message.content.slice(1).trim().split(/ +/);
   const command = args.shift().toLowerCase();
   const member = message.member;
   const guild = message.guild;
 
   // CONFIGURAÇÕES (ADMIN)
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black'].includes(command)) {
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply('❌ Apenas Administradores podem usar este comando.');
+    }
+
+    if (command === 'setcommandschannel') {
+      const channel = message.mentions.channels.first();
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setcommandschannel #bot-commands`');
+      db.commandsChannelId = channel.id;
+      saveDatabase();
+      return message.reply(`✅ Canal principal para comandos definido para: ${channel}`);
     }
 
     if (command === 'abrirjanela') {
@@ -227,7 +258,6 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ Mencione o jogador. Ex: `%black @usuario Motivo Tempo Robux Pix`');
       }
 
-      // Procura pelo menos 3 parâmetros após a menção do usuário (Tempo, Robux e Pix)
       const nonMentionArgs = args.filter(a => !a.startsWith('<@'));
       if (nonMentionArgs.length < 3) {
         return message.reply('❌ Formato incorreto! Uso: `%black @docara Motivo... Tempo Robux Pix` (Ex: `%black @docara Racismo até a GW7 100 5`)');
@@ -240,14 +270,12 @@ client.on('messageCreate', async (message) => {
       let tempoVal = '';
       let motivoVal = '';
 
-      // Tenta separar o tempo do motivo procurando palavras como "até", "gw", "dias", "permanente"
       const tempoMatch = remainingText.match(/(até\s+.*|gw\d+|permanente|\d+\s*dias?)/i);
 
       if (tempoMatch) {
         tempoVal = tempoMatch[0];
         motivoVal = remainingText.replace(tempoMatch[0], '').trim();
       } else {
-        // Fallback: assume a última palavra como tempo se não encontrar o padrão
         const lastSpace = remainingText.lastIndexOf(' ');
         if (lastSpace !== -1) {
           motivoVal = remainingText.substring(0, lastSpace).trim();
@@ -282,7 +310,6 @@ client.on('messageCreate', async (message) => {
           iconURL: guild.iconURL({ dynamic: true, size: 128 }) 
         });
 
-      // Verifica se a mensagem veio com uma imagem anexada (prova)
       const attachment = message.attachments.first();
       if (attachment && attachment.contentType && attachment.contentType.startsWith('image/')) {
         embed.setImage(attachment.url);
@@ -505,7 +532,6 @@ client.on('messageCreate', async (message) => {
     const role = message.mentions.roles.first();
     if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `%roster @Time`');
 
-    // Força o Discord a carregar todos os membros atuais do cargo
     await guild.members.fetch();
 
     const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
