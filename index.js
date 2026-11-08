@@ -419,10 +419,13 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`);
   }
 
-  // COMANDO %roster
+  // COMANDO %roster ATUALIZADO (Busca todos os membros do cargo)
   if (command === 'roster') {
     const role = message.mentions.roles.first();
-    if (!role) return message.reply('❌ Mencione o cargo do time.');
+    if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `%roster @Time`');
+
+    // Força o Discord a carregar todos os membros atuais do cargo
+    await guild.members.fetch();
 
     const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
 
