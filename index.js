@@ -160,7 +160,7 @@ client.on('messageCreate', async (message) => {
   const argsCheck = message.content.slice(1).trim().split(/ +/);
   const cmdCheck = argsCheck.shift().toLowerCase();
   
-  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack'].includes(cmdCheck);
+  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack', 'warn'].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd) {
     const targetChannel = message.guild.channels.cache.get(db.commandsChannelId);
@@ -196,7 +196,7 @@ client.on('messageCreate', async (message) => {
         .setTimestamp();
 
       await faChannel.send({ embeds: [embed] });
-      return message.reply('✅ Seu anúncio de Free Agent foi enviado com sucesso!');
+      return message.reply('✅Seu anúncio de Free Agent foi enviado com sucesso!');
     }
   }
 
@@ -205,7 +205,7 @@ client.on('messageCreate', async (message) => {
   const member = message.member;
   const guild = message.guild;
 
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack', 'warn'].includes(command)) {
     
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores ou membros da Staff/Donos podem usar este comando.');
@@ -399,6 +399,60 @@ client.on('messageCreate', async (message) => {
         }
       } else {
         return message.reply(`✅ Apelação registrada (Negada) em ${blacklistChannel}!`);
+      }
+    }
+
+    // NOVO COMANDO %warn
+    if (command === 'warn') {
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        return message.reply('❌ Mencione o usuário. Ex: `%warn @usuario Motivo da punição`');
+      }
+
+      const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
+      if (!targetMember) {
+        return message.reply('❌ Usuário não encontrado no servidor.');
+      }
+
+      const reason = args.slice(1).join(' ') || 'Não especificado';
+
+      const roleWarn1 = '1562209075968745523';
+      const roleWarn2 = '1562209264569688215';
+      const roleWarn3 = '1562209385822949478';
+
+      const hasWarn1 = targetMember.roles.cache.has(roleWarn1);
+      const hasWarn2 = targetMember.roles.cache.has(roleWarn2);
+      const hasWarn3 = targetMember.roles.cache.has(roleWarn3);
+
+      if (hasWarn3) {
+        return message.reply(`⚠️ O usuário ${targetUser} **já possui Warn 3** e não pode receber mais advertências por este comando.`);
+      }
+
+      try {
+        if (hasWarn2) {
+          // Já tem Warn 2 -> Sobe para Warn 3 e Mute de 1 semana
+          await targetMember.roles.remove(roleWarn2);
+          await targetMember.roles.add(roleWarn3);
+          await targetMember.timeout(7 * 24 * 60 * 60 * 1000, `Warn 3: ${reason}`);
+          return message.reply(`✅ ${targetUser} recebeu **Warn 3** (<@&${roleWarn3}>) e foi mutado por **1 semana**. Motivo: *${reason}*`);
+        } 
+        
+        if (hasWarn1) {
+          // Já tem Warn 1 -> Sobe para Warn 2 e Mute de 1 dia
+          await targetMember.roles.remove(roleWarn1);
+          await targetMember.roles.add(roleWarn2);
+          await targetMember.timeout(24 * 60 * 60 * 1000, `Warn 2: ${reason}`);
+          return message.reply(`✅ ${targetUser} recebeu **Warn 2** (<@&${roleWarn2}>) e foi mutado por **1 dia**. Motivo: *${reason}*`);
+        } 
+        
+        // Não tem nenhum warn -> Recebe Warn 1 e Mute de 1 hora
+        await targetMember.roles.add(roleWarn1);
+        await targetMember.timeout(60 * 60 * 1000, `Warn 1: ${reason}`);
+        return message.reply(`✅ ${targetUser} recebeu **Warn 1** (<@&${roleWarn1}>) e foi mutado por **1 hora**. Motivo: *${reason}*`);
+
+      } catch (err) {
+        console.error('Erro ao aplicar warn/mute:', err);
+        return message.reply('❌ Ocorreu um erro ao aplicar os cargos ou o mute. Verifique se o bot tem permissão superior ao usuário.');
       }
     }
 
