@@ -160,7 +160,6 @@ function parseIntervalToMs(intervalStr) {
     if (unit === 'h') return value * 60 * 60 * 1000;
     if (unit === 'd') return value * 24 * 60 * 60 * 1000;
   }
-  // Se for apenas número, assume minutos
   const num = parseInt(intervalStr);
   if (!isNaN(num)) return num * 60 * 1000;
   return null;
@@ -470,22 +469,19 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // NOVO COMANDO %agendar
-    // Exemplo de uso: %agendar #canal Olá a todos! 25/11/2026 14:30 30m
+    // COMANDO %agendar
     if (command === 'agendar') {
       const targetChannel = message.mentions.channels.first();
       if (!targetChannel) {
         return message.reply('❌ Mencione o canal onde a mensagem será enviada. Ex: `%agendar #geral Sua mensagem aqui 25/11/2026 15:00 30m`');
       }
 
-      // Remove a menção do canal dos argumentos para processar o resto
       const cleanArgs = args.filter(arg => !arg.startsWith('<#'));
       
       if (cleanArgs.length < 4) {
-        return message.reply('❌ Faltam dados! Formato correto: `%agendar #canal Sua mensagem 30m/dias/etc 25/11/2026 14:30 1h`\n*(Dica: Coloque a mensagem entre aspas ou certifique-se de separar os campos de data, hora e intervalo no final).*');
+        return message.reply('❌ Faltam dados! Formato correto: `%agendar #canal Sua mensagem 25/11/2026 14:30 1h`');
       }
 
-      // Os últimos 3 argumentos devem ser: Data (dia/mes/ano), Horário (HH:MM) e Intervalo (ex: 30m ou 1h)
       const intervalStr = cleanArgs.pop();
       const timeStr = cleanArgs.pop();
       const dateStr = cleanArgs.pop();
@@ -495,20 +491,18 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ Escreva a mensagem que deseja agendar.');
       }
 
-      // Validar formato de data (DD/MM/YYYY)
       const dateParts = dateStr.split('/');
       if (dateParts.length !== 3) {
         return message.reply('❌ Formato de data inválido! Use o formato `dia/mes/ano` (Ex: `25/11/2026`).');
       }
 
-      // Validar formato de hora (HH:MM)
       const timeParts = timeStr.split(':');
       if (timeParts.length !== 2) {
         return message.reply('❌ Formato de horário inválido! Use o formato `HH:MM` (Ex: `14:30`).');
       }
 
       const day = parseInt(dateParts[0]);
-      const month = parseInt(dateParts[1]) - 1; // Meses no JS começam em 0
+      const month = parseInt(dateParts[1]) - 1;
       const year = parseInt(dateParts[2]);
       const hours = parseInt(timeParts[0]);
       const minutes = parseInt(timeParts[1]);
@@ -529,11 +523,9 @@ client.on('messageCreate', async (message) => {
 
       message.reply(`✅ Mensagem agendada com sucesso para ${targetChannel}!\n📅 Início: **${dateStr} às ${timeStr}**\n⏱️ Intervalo de repetição: **${intervalStr}**`);
 
-      // Agenda o primeiro disparo e depois repete pelo intervalo
       setTimeout(() => {
         targetChannel.send(msgContent).catch(err => console.error('Erro ao enviar mensagem agendada:', err));
 
-        // Configura o loop de repetição periódica
         setInterval(() => {
           targetChannel.send(msgContent).catch(err => console.error('Erro ao enviar mensagem periódica:', err));
         }, intervalMs);
@@ -679,7 +671,6 @@ client.on('messageCreate', async (message) => {
               { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
             );
 
-prefixes => {
           if (marketChannel) await marketChannel.send({ embeds: [embed] }).catch(() => {});
 
           await dmMsg.edit({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora é do **${teamRole.name}**!`, components: [] }).catch(() => {});
