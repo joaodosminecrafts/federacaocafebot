@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração de Persistência com a Lista Completa de Todos os Times
+// Configuração de Persistência com a Lista Completa de Todos los Times
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
 const DEFAULT_TEAMS = [
@@ -88,6 +88,9 @@ let db = {
   teams: DEFAULT_TEAMS
 };
 
+// Lista para guardar agendamentos ativos na memória
+const activeSchedules = [];
+
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
     try {
@@ -149,7 +152,7 @@ function isStaffOrOwner(member) {
   return member.roles.cache.has(staffRoleId) || member.roles.cache.has(ownerRoleId);
 }
 
-// Conversor de tempo flexível para o intervalo (ex: "1h", "30m", "2d", ou minutos puros)
+// Conversor de tempo flexível (ex: "30m", "2h", "1d")
 function parseIntervalToMs(intervalStr) {
   const regex = /^(\d+)([mhd])$/i;
   const match = intervalStr.match(regex);
@@ -176,7 +179,7 @@ client.on('messageCreate', async (message) => {
   const argsCheck = message.content.slice(1).trim().split(/ +/);
   const cmdCheck = argsCheck.shift().toLowerCase();
   
-  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack', 'warn', 'agendar'].includes(cmdCheck);
+  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados'].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd) {
     const targetChannel = message.guild.channels.cache.get(db.commandsChannelId);
@@ -201,7 +204,7 @@ client.on('messageCreate', async (message) => {
 
       const faChannel = message.guild.channels.cache.get(db.faChannelId);
       if (!faChannel) {
-        return message.reply('❌ Canal de Free Agency não configurado! (Use `setfachannel #canal`)');
+        return message.reply('❌ Canal de Free Agency não configurado!');
       }
 
       const embed = new EmbedBuilder()
@@ -221,7 +224,7 @@ client.on('messageCreate', async (message) => {
   const member = message.member;
   const guild = message.guild;
 
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack', 'warn', 'agendar'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados'].includes(command)) {
     
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores ou membros da Staff/Donos podem usar este comando.');
@@ -229,7 +232,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setcommandschannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setcommandschannel #bot-commands`');
+      if (!channel) return message.reply('❌ Mencione um canal válido.');
       db.commandsChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal principal para comandos definido para: ${channel}`);
@@ -249,7 +252,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setmarketchannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setmarketchannel #transfer-market`');
+      if (!channel) return message.reply('❌ Mencione um canal válido.');
       db.marketChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de transferências definido para: ${channel}`);
@@ -257,7 +260,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setfachannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setfachannel #free-agency`');
+      if (!channel) return message.reply('❌ Mencione um canal válido.');
       db.faChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de Free Agency definido para: ${channel}`);
@@ -265,7 +268,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setblacklistchannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setblacklistchannel #blacklists`');
+      if (!channel) return message.reply('❌ Mencione um canal válido.');
       db.blacklistChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de Blacklists definido para: ${channel}`);
@@ -285,7 +288,7 @@ client.on('messageCreate', async (message) => {
 
       const nonMentionArgs = args.filter(a => !a.includes(targetUser.id) && !a.startsWith('<@'));
       if (nonMentionArgs.length < 3) {
-        return message.reply('❌ Formato incorreto! Uso: `%black @docara Motivo... Tempo Robux Pix` (Ex: `%black @docara Racismo até a GW7 100 5`)');
+        return message.reply('❌ Formato incorreto! Uso: `%black @docara Motivo... Tempo Robux Pix`');
       }
 
       const pixVal = nonMentionArgs.pop();
@@ -315,7 +318,7 @@ client.on('messageCreate', async (message) => {
 
       const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
       if (!blacklistChannel) {
-        return message.reply('❌ Canal de Blacklist não configurado! Use `setblacklistchannel #canal` primeiro.');
+        return message.reply('❌ Canal de Blacklist não configurado!');
       }
 
       const robuxEmoji = '<:robux:1553191661545193603>';
@@ -329,11 +332,7 @@ client.on('messageCreate', async (message) => {
           `**Tempo:** ${tempoVal}\n` +
           `**Bail:** ${robuxVal} ${robuxEmoji} ${pixVal} ${pixEmoji}`
         )
-        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
-        .setFooter({ 
-          text: 'Prezando por uma comunidade melhor.', 
-          iconURL: guild.iconURL({ dynamic: true, size: 128 }) 
-        });
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }));
 
       const attachment = message.attachments.first();
       if (attachment && attachment.contentType && attachment.contentType.startsWith('image/')) {
@@ -349,8 +348,7 @@ client.on('messageCreate', async (message) => {
         });
         return message.reply(`✅ Registrado em ${blacklistChannel} e **${targetUser.tag} foi banido**!`);
       } catch (err) {
-        console.error('Erro ao banir membro:', err);
-        return message.reply(`✅ Registrado em ${blacklistChannel}, mas ⚠️ **não foi possível banir o usuário** (verifique os cargos).`);
+        return message.reply(`✅ Registrado em ${blacklistChannel}, mas ⚠️ **não foi possível banir o usuário**.`);
       }
     }
 
@@ -368,7 +366,7 @@ client.on('messageCreate', async (message) => {
 
       const nonMentionArgs = args.filter(a => !a.includes(targetUser.id) && !a.startsWith('<@'));
       if (nonMentionArgs.length < 2) {
-        return message.reply('❌ Formato incorreto! Uso: `%unblack @usuario [C/F] [Estado]` (Ex: `%unblack @docarabanido C Pagou`)');
+        return message.reply('❌ Formato incorreto!');
       }
 
       const statusLetter = nonMentionArgs.shift().toUpperCase();
@@ -376,19 +374,11 @@ client.on('messageCreate', async (message) => {
 
       const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
       if (!blacklistChannel) {
-        return message.reply('❌ Canal de Blacklist não configurado! Use `setblacklistchannel #canal` primeiro.');
+        return message.reply('❌ Canal de Blacklist não configurado!');
       }
 
-      let emojiStatus = '';
-      let estadoFinal = '';
-
-      if (statusLetter === 'C') {
-        emojiStatus = '✅';
-        estadoFinal = statusText.toLowerCase() === 'pagou' ? 'Retirada.' : statusText;
-      } else {
-        emojiStatus = '❌';
-        estadoFinal = statusText;
-      }
+      let emojiStatus = statusLetter === 'C' ? '✅' : '❌';
+      let estadoFinal = statusLetter === 'C' && statusText.toLowerCase() === 'pagou' ? 'Retirada.' : statusText;
 
       const embed = new EmbedBuilder()
         .setColor(0x2B2D31)
@@ -397,38 +387,29 @@ client.on('messageCreate', async (message) => {
           `**Usuário:** ${targetUser.username}\n` +
           `**Estado:** ${emojiStatus} ${estadoFinal}`
         )
-        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
-        .setFooter({ 
-          text: 'Prezando por uma comunidade melhor.', 
-          iconURL: guild.iconURL({ dynamic: true, size: 128 }) 
-        });
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }));
 
       await blacklistChannel.send({ embeds: [embed] });
 
       if (statusLetter === 'C') {
         try {
-          await guild.members.unban(targetUser.id, `Ban Appeal Aprovada: ${estadoFinal}`);
-          return message.reply(`✅ Apelação registrada em ${blacklistChannel} e **${targetUser.tag} foi desbanido** com sucesso!`);
+          await guild.members.unban(targetUser.id, `Ban Appeal Aprovada`);
+          return message.reply(`✅ Apelação registrada e **${targetUser.tag} desbanido**!`);
         } catch (err) {
-          console.error('Erro ao desbanir membro:', err);
-          return message.reply(`✅ Apelação registrada em ${blacklistChannel}, mas ⚠️ **não foi possível desbanir o usuário** (ele pode já não estar banido).`);
+          return message.reply(`✅ Apelação registrada, mas não foi possível desbanir.`);
         }
       } else {
-        return message.reply(`✅ Apelação registrada (Negada) em ${blacklistChannel}!`);
+        return message.reply(`✅ Apelação registrada (Negada)!`);
       }
     }
 
     // COMANDO %warn
     if (command === 'warn') {
       const targetUser = message.mentions.users.first();
-      if (!targetUser) {
-        return message.reply('❌ Mencione o usuário. Ex: `%warn @usuario Motivo da punição`');
-      }
+      if (!targetUser) return message.reply('❌ Mencione o usuário. Ex: `%warn @usuario Motivo`');
 
       const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-      if (!targetMember) {
-        return message.reply('❌ Usuário não encontrado no servidor.');
-      }
+      if (!targetMember) return message.reply('❌ Usuário não encontrado.');
 
       const reason = args.slice(1).join(' ') || 'Não especificado';
 
@@ -441,7 +422,7 @@ client.on('messageCreate', async (message) => {
       const hasWarn3 = targetMember.roles.cache.has(roleWarn3);
 
       if (hasWarn3) {
-        return message.reply(`⚠️ O usuário ${targetUser} **já possui Warn 3** e não pode receber mais advertências por este comando.`);
+        return message.reply(`⚠️ O usuário ${targetUser} **já possui Warn 3**.`);
       }
 
       try {
@@ -449,95 +430,114 @@ client.on('messageCreate', async (message) => {
           await targetMember.roles.remove(roleWarn2);
           await targetMember.roles.add(roleWarn3);
           await targetMember.timeout(7 * 24 * 60 * 60 * 1000, `Warn 3: ${reason}`);
-          return message.reply(`✅ ${targetUser} recebeu **Warn 3** (<@&${roleWarn3}>) e foi mutado por **1 semana**. Motivo: *${reason}*`);
+          return message.reply(`✅ ${targetUser} recebeu **Warn 3** e mute de **1 semana**.`);
         } 
-        
         if (hasWarn1) {
           await targetMember.roles.remove(roleWarn1);
           await targetMember.roles.add(roleWarn2);
           await targetMember.timeout(24 * 60 * 60 * 1000, `Warn 2: ${reason}`);
-          return message.reply(`✅ ${targetUser} recebeu **Warn 2** (<@&${roleWarn2}>) e foi mutado por **1 dia**. Motivo: *${reason}*`);
+          return message.reply(`✅ ${targetUser} recebeu **Warn 2** e mute de **1 dia**.`);
         } 
-        
         await targetMember.roles.add(roleWarn1);
         await targetMember.timeout(60 * 60 * 1000, `Warn 1: ${reason}`);
-        return message.reply(`✅ ${targetUser} recebeu **Warn 1** (<@&${roleWarn1}>) e foi mutado por **1 hora**. Motivo: *${reason}*`);
-
+        return message.reply(`✅ ${targetUser} recebeu **Warn 1** e mute de **1 hora**.`);
       } catch (err) {
-        console.error('Erro ao aplicar warn/mute:', err);
-        return message.reply('❌ Ocorreu um erro ao aplicar os cargos ou o mute. Verifique se o bot tem permissão superior ao usuário.');
+        return message.reply('❌ Erro ao aplicar cargos ou mute (verifique as permissões do bot).');
       }
     }
 
-    // COMANDO %agendar
+    // NOVO COMANDO %agendar (Simplificado por contagem regressiva para evitar erros de fuso)
+    // Exemplo: %agendar #canal Olá galera 10m 1h (Envia daqui a 10 minutos, repetindo a cada 1 hora)
     if (command === 'agendar') {
       const targetChannel = message.mentions.channels.first();
       if (!targetChannel) {
-        return message.reply('❌ Mencione o canal onde a mensagem será enviada. Ex: `%agendar #geral Sua mensagem aqui 25/11/2026 15:00 30m`');
+        return message.reply('❌ Mencione o canal. Ex: `%agendar #geral Olá mundo 5m 1h`');
       }
 
       const cleanArgs = args.filter(arg => !arg.startsWith('<#'));
-      
-      if (cleanArgs.length < 4) {
-        return message.reply('❌ Faltam dados! Formato correto: `%agendar #canal Sua mensagem 25/11/2026 14:30 1h`');
+      if (cleanArgs.length < 3) {
+        return message.reply('❌ Faltam dados! Uso correto: `%agendar #canal Sua Mensagem [TempoParaComeçar] [IntervaloRepetição]`\nExemplo: `%agendar #geral Boa tarde! 0 30m` (começa agora, repete a cada 30 min)');
       }
 
-      const intervalStr = cleanArgs.pop();
-      const timeStr = cleanArgs.pop();
-      const dateStr = cleanArgs.pop();
+      const intervalStr = cleanArgs.pop(); // ex: 1h
+      const initialDelayStr = cleanArgs.pop(); // ex: 10m ou 0
       const msgContent = cleanArgs.join(' ');
 
-      if (!msgContent) {
-        return message.reply('❌ Escreva a mensagem que deseja agendar.');
-      }
-
-      const dateParts = dateStr.split('/');
-      if (dateParts.length !== 3) {
-        return message.reply('❌ Formato de data inválido! Use o formato `dia/mes/ano` (Ex: `25/11/2026`).');
-      }
-
-      const timeParts = timeStr.split(':');
-      if (timeParts.length !== 2) {
-        return message.reply('❌ Formato de horário inválido! Use o formato `HH:MM` (Ex: `14:30`).');
-      }
-
-      const day = parseInt(dateParts[0]);
-      const month = parseInt(dateParts[1]) - 1;
-      const year = parseInt(dateParts[2]);
-      const hours = parseInt(timeParts[0]);
-      const minutes = parseInt(timeParts[1]);
-
-      const targetDate = new Date(year, month, day, hours, minutes, 0);
-      const now = new Date();
-
-      const delay = targetDate.getTime() - now.getTime();
-
-      if (isNaN(delay) || delay < 0) {
-        return message.reply('❌ A data e horário informados já passaram ou são inválidos!');
-      }
-
+      const initialDelayMs = parseIntervalToMs(initialDelayStr);
       const intervalMs = parseIntervalToMs(intervalStr);
-      if (!intervalMs || isNaN(intervalMs)) {
-        return message.reply('❌ Intervalo de tempo inválido! Use formato como `30m` (minutos), `2h` (horas) ou `1d` (dias).');
+
+      if (initialDelayMs === null || intervalMs === null) {
+        return message.reply('❌ Formato de tempo inválido! Use por exemplo `5m` (minutos), `2h` (horas) ou `0` (agora).');
       }
 
-      message.reply(`✅ Mensagem agendada com sucesso para ${targetChannel}!\n📅 Início: **${dateStr} às ${timeStr}**\n⏱️ Intervalo de repetição: **${intervalStr}**`);
+      const scheduleId = Math.floor(1000 + Math.random() * 9000); // ID de 4 dígitos
 
-      setTimeout(() => {
-        targetChannel.send(msgContent).catch(err => console.error('Erro ao enviar mensagem agendada:', err));
+      // Cria a tarefa agendada
+      const timerObj = setTimeout(() => {
+        targetChannel.send(msgContent).catch(() => {});
 
-        setInterval(() => {
-          targetChannel.send(msgContent).catch(err => console.error('Erro ao enviar mensagem periódica:', err));
+        const intervalObj = setInterval(() => {
+          targetChannel.send(msgContent).catch(() => {});
         }, intervalMs);
 
-      }, delay);
+        // Guarda a referência para permitir cancelamento futuro
+        const index = activeSchedules.findIndex(s => s.id === scheduleId);
+        if (index !== -1) activeSchedules[index].intervalRef = intervalObj;
 
-      return;
+      }, initialDelayMs);
+
+      activeSchedules.push({
+        id: scheduleId,
+        channelId: targetChannel.id,
+        content: msgContent,
+        timeoutRef: timerObj,
+        intervalRef: null
+      });
+
+      return message.reply(`✅ Mensagem agendada com sucesso! **ID do Agendamento: #${scheduleId}**\n• Início em: \`${initialDelayStr}\`\n• Repetição a cada: \`${intervalStr}\``);
+    }
+
+    // NOVO COMANDO %listagendados (Mostra todos os agendamentos ativos)
+    if (command === 'listagendados') {
+      if (activeSchedules.length === 0) {
+        return message.reply('📋 Não há mensagens agendadas no momento.');
+      }
+
+      const lista = activeSchedules.map(s => `• **ID #${s.id}** -> Canal: <#${s.channelId}> | Mensagem: "${s.content.substring(0, 30)}..."`).join('\n');
+      const embed = new EmbedBuilder()
+        .setColor(0x0099FF)
+        .setTitle('📅 Mensagens Agendadas Ativas')
+        .setDescription(lista);
+
+      return message.reply({ embeds: [embed] });
+    }
+
+    // NOVO COMANDO %desagendar <ID> (Cancela um agendamento)
+    if (command === 'desagendar') {
+      const idArg = args[0];
+      if (!idArg) {
+        return message.reply('❌ Indique o ID do agendamento. Use `%listagendados` para ver os IDs. Ex: `%desagendar 4821`');
+      }
+
+      const cleanId = parseInt(idArg.replace('#', ''));
+      const index = activeSchedules.findIndex(s => s.id === cleanId);
+
+      if (index === -1) {
+        return message.reply(`❌ Nenhum agendamento encontrado com o ID #${cleanId}.`);
+      }
+
+      const sched = activeSchedules[index];
+      clearTimeout(sched.timeoutRef);
+      if (sched.intervalRef) clearInterval(sched.intervalRef);
+
+      activeSchedules.splice(index, 1);
+
+      return message.reply(`🗑️ Agendamento **#${cleanId}** cancelado com sucesso!`);
     }
 
     if (command === 'setrosterlimit') {
       const limit = parseInt(args[0]);
-      if (isNaN(limit)) return message.reply('❌ Digite um número válido. Ex: `setrosterlimit 20`');
+      if (isNaN(limit)) return message.reply('❌ Digite um número válido.');
       db.rosterLimit = limit;
       saveDatabase();
       return message.reply(`✅ Limite de elenco definido para **${limit}**.`);
@@ -554,30 +554,24 @@ client.on('messageCreate', async (message) => {
     if (command === 'addteam') {
       const role = message.mentions.roles.first();
       const emoji = args[1];
-
-      if (!role || !emoji) return message.reply('❌ Uso correto: `addteam @CargoDoTime :emoji:`');
-
+      if (!role || !emoji) return message.reply('❌ Uso correto: `addteam @Cargo :emoji:`');
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       db.teams.push({ roleId: role.id, emoji });
       saveDatabase();
-      return message.reply(`✅ Time ${role} adicionado com o emoji ${emoji}!`);
+      return message.reply(`✅ Time ${role} adicionado!`);
     }
 
     if (command === 'addteams') {
       const lines = message.content.split('\n');
       let adicionados = 0;
-
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line || line.startsWith('%addteams')) continue;
-
         const roleMentionMatch = line.match(/<@&(\d+)>/);
         const customEmojiMatch = line.match(/<a?:\w+:\d+>/);
         const parts = line.split(/ +/);
         const standardEmoji = parts.find(p => (p.includes(':') && !p.startsWith('<@&')) || /\p{Extended_Pictographic}/u.test(p));
-        
         const emoji = customEmojiMatch ? customEmojiMatch[0] : standardEmoji;
-
         if (roleMentionMatch && emoji) {
           const roleId = roleMentionMatch[1];
           db.teams = db.teams.filter(t => t.roleId !== roleId);
@@ -585,16 +579,14 @@ client.on('messageCreate', async (message) => {
           adicionados++;
         }
       }
-
       if (adicionados === 0) return message.reply('❌ Nenhum time válido encontrado.');
-
       saveDatabase();
-      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s)! Total: **${db.teams.length}**.`);
+      return message.reply(`✅ **${adicionados}** time(s) cadastrado(s)!`);
     }
 
     if (command === 'removeteam') {
       const role = message.mentions.roles.first();
-      if (!role) return message.reply('❌ Mencione o cargo do time a remover.');
+      if (!role) return message.reply('❌ Mencione o cargo do time.');
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       saveDatabase();
       return message.reply(`🗑️ Time ${role} removido.`);
@@ -609,24 +601,16 @@ client.on('messageCreate', async (message) => {
   // COMANDO %sign
   if (command === 'sign') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem fazer ofertas.');
-
     const team = getUserTeam(member);
-    if (!team) return message.reply('❌ Você não pertence a nenhum time cadastrado.');
-
+    if (!team) return message.reply('❌ Você não pertence a nenhum time.');
     const targetUser = message.mentions.users.first();
-    if (!targetUser) return message.reply('❌ Mencione o jogador que deseja contratar.');
-
+    if (!targetUser) return message.reply('❌ Mencione o jogador.');
     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember || targetUser.bot) return message.reply('❌ Jogador inválido.');
-
-    if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador ${targetUser} já pertence a uma equipe!`);
+    if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador já pertence a uma equipe!`);
 
     const teamRole = guild.roles.cache.get(team.roleId);
-    const currentRosterCount = teamRole ? teamRole.members.size : 0;
-
-    if (currentRosterCount >= db.rosterLimit) {
-      return message.reply(`🔋 **Elenco Cheio!** (${currentRosterCount}/${db.rosterLimit})`);
-    }
+    if (teamRole.members.size >= db.rosterLimit) return message.reply(`🔋 **Elenco Cheio!**`);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
@@ -635,153 +619,84 @@ client.on('messageCreate', async (message) => {
 
     try {
       const dmMsg = await targetUser.send({
-        content: `📝 Olá ${targetUser}, você recebeu uma proposta oficial para entrar no **${teamRole.name}** (${team.emoji}) enviada por **${member.user.username}**!`,
+        content: `📝 Proposta oficial para o **${teamRole.name}** (${team.emoji}) enviada por **${member.user.username}**!`,
         components: [row]
       });
-
-      await message.reply(`📩 Proposta enviada no privado de ${targetUser}!`);
+      await message.reply(`📩 Proposta enviada no privado!`);
 
       const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
-
       collector.on('collect', async i => {
         await i.deferUpdate().catch(() => {});
-
         if (i.customId === 'decline_offer') {
-          await dmMsg.edit({ content: `❌ Você recusou a proposta do **${teamRole.name}**.`, components: [] }).catch(() => {});
-          await message.channel.send(`❌ ${targetUser} recusou a proposta do **${teamRole.name}**.`).catch(() => {});
+          await dmMsg.edit({ content: `❌ Proposta recusada.`, components: [] }).catch(() => {});
           return;
         }
-
         if (i.customId === 'accept_offer') {
-          if (!db.marketOpen) return targetUser.send('🔒 A janela fechou antes de você aceitar.').catch(() => {});
-          if (teamRole.members.size >= db.rosterLimit) return targetUser.send('🔋 O time lotou antes de você aceitar.').catch(() => {});
-
-          await targetMember.roles.add(teamRole).catch(err => console.error('Erro ao dar cargo:', err));
-
-          const newRosterCount = teamRole.members.size;
+          if (!db.marketOpen || teamRole.members.size >= db.rosterLimit) return;
+          await targetMember.roles.add(teamRole).catch(() => {});
           const marketChannel = guild.channels.cache.get(db.marketChannelId);
-
           const embed = new EmbedBuilder()
             .setColor(0xFF0000)
-            .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
             .setTitle('Offer Accepted')
-            .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has accepted the offer to ${team.emoji} <@&${team.roleId}>`)
-            .addFields(
-              { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
-              { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
-            );
-
+            .setDescription(`<@${targetUser.id}> entrou para ${team.emoji} <@&${team.roleId}>`);
           if (marketChannel) await marketChannel.send({ embeds: [embed] }).catch(() => {});
-
-          await dmMsg.edit({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora é do **${teamRole.name}**!`, components: [] }).catch(() => {});
+          await dmMsg.edit({ content: `🎉 Parabéns! Você agora é do **${teamRole.name}**!`, components: [] }).catch(() => {});
         }
       });
-
     } catch (err) {
-      return message.reply(`❌ Não foi possível enviar DM para ${targetUser}. O jogador precisa liberar as mensagens privadas.`);
+      return message.reply(`❌ Não foi possível enviar DM para o jogador.`);
     }
   }
 
   // COMANDO %release
   if (command === 'release') {
-    if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem dispensar.');
-
+    if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners.');
     const team = getUserTeam(member);
-    if (!team) return message.reply('❌ Você não pertence a nenhum time cadastrado.');
-
+    if (!team) return message.reply('❌ Você não tem time.');
     const targetUser = message.mentions.users.first();
-    if (!targetUser) return message.reply('❌ Mencione o jogador a dispensar.');
-
+    if (!targetUser) return message.reply('❌ Mencione o jogador.');
     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
-    if (!targetMember || !targetMember.roles.cache.has(team.roleId)) {
-      return message.reply('❌ O jogador não pertence ao seu time.');
-    }
+    if (!targetMember || !targetMember.roles.cache.has(team.roleId)) return message.reply('❌ O jogador não é do seu time.');
 
     const teamRole = guild.roles.cache.get(team.roleId);
     await targetMember.roles.remove(teamRole);
-
-    const newRosterCount = teamRole.members.size;
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x888888)
-      .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
-      .setTitle('Player Released')
-      .setDescription(`<@${targetUser.id}> \`${targetUser.username}\` has been released from ${team.emoji} <@&${team.roleId}>`)
-      .addFields(
-        { name: ' ', value: `• 👤 **Coach** - <@${member.id}> \`${member.user.username}\`` },
-        { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
-      );
-
+    const embed = new EmbedBuilder().setColor(0x888888).setTitle('Player Released').setDescription(`<@${targetUser.id}> dispensado de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
-
-    return message.reply(`✅ ${targetUser} foi dispensado com sucesso.`);
+    return message.reply(`✅ Jogador dispensado.`);
   }
 
   // COMANDO %demand
   if (command === 'demand') {
     const team = getUserTeam(member);
-    if (!team) return message.reply('❌ Você não pertence a nenhum time.');
-
+    if (!team) return message.reply('❌ Você não tem time.');
     const teamRole = guild.roles.cache.get(team.roleId);
     await member.roles.remove(teamRole);
-
-    const newRosterCount = teamRole.members.size;
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
-
-    const embed = new EmbedBuilder()
-      .setColor(0xFFA500)
-      .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
-      .setTitle('Contract Terminated')
-      .setDescription(`<@${member.id}> \`${member.user.username}\` has demanded out of ${team.emoji} <@&${team.roleId}>`)
-      .addFields(
-        { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
-      );
-
+    const embed = new EmbedBuilder().setColor(0xFFA500).setTitle('Contract Terminated').setDescription(`<@${member.id}> saiu de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
-
-    return message.reply(`✅ Você saiu do time **${teamRole.name}** e voltou a ser Free Agent!`);
+    return message.reply(`✅ Você saiu do time.`);
   }
 
   // COMANDO %roster
   if (command === 'roster') {
     const role = message.mentions.roles.first();
-    if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `roster @Time`');
-
+    if (!role) return message.reply('❌ Mencione o cargo do time.');
     await guild.members.fetch();
-
-    const members = role.members.map(m => `• <@${m.id}> (\`${m.user.username}\`)`).join('\n') || '*Nenhum jogador no momento.*';
-
-    const embed = new EmbedBuilder()
-      .setColor(0x00FF00)
-      .setTitle(`📋 Elenco - ${role.name}`)
-      .setDescription(members)
-      .addFields({ name: '🔋 Roster Cap', value: `\`${role.members.size}/${db.rosterLimit}\`` });
-
+    const members = role.members.map(m => `• <@${m.id}>`).join('\n') || '*Nenhum jogador.*';
+    const embed = new EmbedBuilder().setColor(0x00FF00).setTitle(`📋 Elenco - ${role.name}`).setDescription(members);
     return message.reply({ embeds: [embed] });
   }
 
   // COMANDO %teams
   if (command === 'teams' || command === 'times') {
-    if (db.teams.length === 0) return message.reply('📋 Nenhum time cadastrado.');
-
-    const lista = db.teams.map((t, index) => {
-      const role = guild.roles.cache.get(t.roleId);
-      const nomeCargo = role ? `<@&${t.roleId}>` : 'Cargo não encontrado';
-      return `${index + 1}. ${t.emoji} ${nomeCargo}`;
-    }).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setColor(0x0099FF)
-      .setTitle('🏆 Times Cadastrados na Liga')
-      .setDescription(lista)
-      .setFooter({ text: `Total de equipes: ${db.teams.length}` });
-
+    if (db.teams.length === 0) return message.reply('📋 Nenhum time.');
+    const lista = db.teams.map((t, index) => `${index + 1}. ${t.emoji} <@&${t.roleId}>`).join('\n');
+    const embed = new EmbedBuilder().setColor(0x0099FF).setTitle('🏆 Times').setDescription(lista);
     return message.reply({ embeds: [embed] });
   }
 });
 
-// Autenticação
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 if (token) {
   client.login(token).catch(err => console.error('[ERRO DISCORD LOGIN]:', err.message));
