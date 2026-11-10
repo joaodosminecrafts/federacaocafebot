@@ -149,6 +149,23 @@ function isStaffOrOwner(member) {
   return member.roles.cache.has(staffRoleId) || member.roles.cache.has(ownerRoleId);
 }
 
+// Conversor de tempo flexível para o intervalo (ex: "1h", "30m", "2d", ou minutos puros)
+function parseIntervalToMs(intervalStr) {
+  const regex = /^(\d+)([mhd])$/i;
+  const match = intervalStr.match(regex);
+  if (match) {
+    const value = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    if (unit === 'm') return value * 60 * 1000;
+    if (unit === 'h') return value * 60 * 60 * 1000;
+    if (unit === 'd') return value * 24 * 60 * 60 * 1000;
+  }
+  // Se for apenas número, assume minutos
+  const num = parseInt(intervalStr);
+  if (!isNaN(num)) return num * 60 * 1000;
+  return null;
+}
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
@@ -160,7 +177,7 @@ client.on('messageCreate', async (message) => {
   const argsCheck = message.content.slice(1).trim().split(/ +/);
   const cmdCheck = argsCheck.shift().toLowerCase();
   
-  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack', 'warn'].includes(cmdCheck);
+  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack', 'warn', 'agendar'].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd) {
     const targetChannel = message.guild.channels.cache.get(db.commandsChannelId);
@@ -185,7 +202,7 @@ client.on('messageCreate', async (message) => {
 
       const faChannel = message.guild.channels.cache.get(db.faChannelId);
       if (!faChannel) {
-        return message.reply('❌ Canal de Free Agency não configurado! (Use `%setfachannel #canal`)');
+        return message.reply('❌ Canal de Free Agency não configurado! (Use `setfachannel #canal`)');
       }
 
       const embed = new EmbedBuilder()
@@ -196,7 +213,7 @@ client.on('messageCreate', async (message) => {
         .setTimestamp();
 
       await faChannel.send({ embeds: [embed] });
-      return message.reply('✅Seu anúncio de Free Agent foi enviado com sucesso!');
+      return message.reply('✅ Seu anúncio de Free Agent foi enviado com sucesso!');
     }
   }
 
@@ -205,7 +222,7 @@ client.on('messageCreate', async (message) => {
   const member = message.member;
   const guild = message.guild;
 
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack', 'warn'].includes(command)) {
+  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack', 'warn', 'agendar'].includes(command)) {
     
     if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores ou membros da Staff/Donos podem usar este comando.');
@@ -213,7 +230,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setcommandschannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setcommandschannel #bot-commands`');
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setcommandschannel #bot-commands`');
       db.commandsChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal principal para comandos definido para: ${channel}`);
@@ -233,7 +250,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setmarketchannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setmarketchannel #transfer-market`');
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setmarketchannel #transfer-market`');
       db.marketChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de transferências definido para: ${channel}`);
@@ -241,7 +258,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setfachannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setfachannel #free-agency`');
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setfachannel #free-agency`');
       db.faChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de Free Agency definido para: ${channel}`);
@@ -249,13 +266,13 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'setblacklistchannel') {
       const channel = message.mentions.channels.first();
-      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `%setblacklistchannel #blacklists`');
+      if (!channel) return message.reply('❌ Mencione um canal válido. Ex: `setblacklistchannel #blacklists`');
       db.blacklistChannelId = channel.id;
       saveDatabase();
       return message.reply(`✅ Canal de Blacklists definido para: ${channel}`);
     }
 
-    // COMANDO %black CORRIGIDO
+    // COMANDO %black
     if (command === 'black') {
       let targetUser = message.mentions.users.first();
       if (!targetUser && args[0]) {
@@ -299,7 +316,7 @@ client.on('messageCreate', async (message) => {
 
       const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
       if (!blacklistChannel) {
-        return message.reply('❌ Canal de Blacklist não configurado! Use `%setblacklistchannel #canal` primeiro.');
+        return message.reply('❌ Canal de Blacklist não configurado! Use `setblacklistchannel #canal` primeiro.');
       }
 
       const robuxEmoji = '<:robux:1553191661545193603>';
@@ -338,7 +355,7 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // COMANDO %unblack CORRIGIDO
+    // COMANDO %unblack
     if (command === 'unblack') {
       let targetUser = message.mentions.users.first();
       if (!targetUser && args[0]) {
@@ -360,7 +377,7 @@ client.on('messageCreate', async (message) => {
 
       const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
       if (!blacklistChannel) {
-        return message.reply('❌ Canal de Blacklist não configurado! Use `%setblacklistchannel #canal` primeiro.');
+        return message.reply('❌ Canal de Blacklist não configurado! Use `setblacklistchannel #canal` primeiro.');
       }
 
       let emojiStatus = '';
@@ -402,7 +419,7 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // NOVO COMANDO %warn
+    // COMANDO %warn
     if (command === 'warn') {
       const targetUser = message.mentions.users.first();
       if (!targetUser) {
@@ -430,7 +447,6 @@ client.on('messageCreate', async (message) => {
 
       try {
         if (hasWarn2) {
-          // Já tem Warn 2 -> Sobe para Warn 3 e Mute de 1 semana
           await targetMember.roles.remove(roleWarn2);
           await targetMember.roles.add(roleWarn3);
           await targetMember.timeout(7 * 24 * 60 * 60 * 1000, `Warn 3: ${reason}`);
@@ -438,14 +454,12 @@ client.on('messageCreate', async (message) => {
         } 
         
         if (hasWarn1) {
-          // Já tem Warn 1 -> Sobe para Warn 2 e Mute de 1 dia
           await targetMember.roles.remove(roleWarn1);
           await targetMember.roles.add(roleWarn2);
           await targetMember.timeout(24 * 60 * 60 * 1000, `Warn 2: ${reason}`);
           return message.reply(`✅ ${targetUser} recebeu **Warn 2** (<@&${roleWarn2}>) e foi mutado por **1 dia**. Motivo: *${reason}*`);
         } 
         
-        // Não tem nenhum warn -> Recebe Warn 1 e Mute de 1 hora
         await targetMember.roles.add(roleWarn1);
         await targetMember.timeout(60 * 60 * 1000, `Warn 1: ${reason}`);
         return message.reply(`✅ ${targetUser} recebeu **Warn 1** (<@&${roleWarn1}>) e foi mutado por **1 hora**. Motivo: *${reason}*`);
@@ -456,9 +470,82 @@ client.on('messageCreate', async (message) => {
       }
     }
 
+    // NOVO COMANDO %agendar
+    // Exemplo de uso: %agendar #canal Olá a todos! 25/11/2026 14:30 30m
+    if (command === 'agendar') {
+      const targetChannel = message.mentions.channels.first();
+      if (!targetChannel) {
+        return message.reply('❌ Mencione o canal onde a mensagem será enviada. Ex: `%agendar #geral Sua mensagem aqui 25/11/2026 15:00 30m`');
+      }
+
+      // Remove a menção do canal dos argumentos para processar o resto
+      const cleanArgs = args.filter(arg => !arg.startsWith('<#'));
+      
+      if (cleanArgs.length < 4) {
+        return message.reply('❌ Faltam dados! Formato correto: `%agendar #canal Sua mensagem 30m/dias/etc 25/11/2026 14:30 1h`\n*(Dica: Coloque a mensagem entre aspas ou certifique-se de separar os campos de data, hora e intervalo no final).*');
+      }
+
+      // Os últimos 3 argumentos devem ser: Data (dia/mes/ano), Horário (HH:MM) e Intervalo (ex: 30m ou 1h)
+      const intervalStr = cleanArgs.pop();
+      const timeStr = cleanArgs.pop();
+      const dateStr = cleanArgs.pop();
+      const msgContent = cleanArgs.join(' ');
+
+      if (!msgContent) {
+        return message.reply('❌ Escreva a mensagem que deseja agendar.');
+      }
+
+      // Validar formato de data (DD/MM/YYYY)
+      const dateParts = dateStr.split('/');
+      if (dateParts.length !== 3) {
+        return message.reply('❌ Formato de data inválido! Use o formato `dia/mes/ano` (Ex: `25/11/2026`).');
+      }
+
+      // Validar formato de hora (HH:MM)
+      const timeParts = timeStr.split(':');
+      if (timeParts.length !== 2) {
+        return message.reply('❌ Formato de horário inválido! Use o formato `HH:MM` (Ex: `14:30`).');
+      }
+
+      const day = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]) - 1; // Meses no JS começam em 0
+      const year = parseInt(dateParts[2]);
+      const hours = parseInt(timeParts[0]);
+      const minutes = parseInt(timeParts[1]);
+
+      const targetDate = new Date(year, month, day, hours, minutes, 0);
+      const now = new Date();
+
+      const delay = targetDate.getTime() - now.getTime();
+
+      if (isNaN(delay) || delay < 0) {
+        return message.reply('❌ A data e horário informados já passaram ou são inválidos!');
+      }
+
+      const intervalMs = parseIntervalToMs(intervalStr);
+      if (!intervalMs || isNaN(intervalMs)) {
+        return message.reply('❌ Intervalo de tempo inválido! Use formato como `30m` (minutos), `2h` (horas) ou `1d` (dias).');
+      }
+
+      message.reply(`✅ Mensagem agendada com sucesso para ${targetChannel}!\n📅 Início: **${dateStr} às ${timeStr}**\n⏱️ Intervalo de repetição: **${intervalStr}**`);
+
+      // Agenda o primeiro disparo e depois repete pelo intervalo
+      setTimeout(() => {
+        targetChannel.send(msgContent).catch(err => console.error('Erro ao enviar mensagem agendada:', err));
+
+        // Configura o loop de repetição periódica
+        setInterval(() => {
+          targetChannel.send(msgContent).catch(err => console.error('Erro ao enviar mensagem periódica:', err));
+        }, intervalMs);
+
+      }, delay);
+
+      return;
+    }
+
     if (command === 'setrosterlimit') {
       const limit = parseInt(args[0]);
-      if (isNaN(limit)) return message.reply('❌ Digite um número válido. Ex: `%setrosterlimit 20`');
+      if (isNaN(limit)) return message.reply('❌ Digite um número válido. Ex: `setrosterlimit 20`');
       db.rosterLimit = limit;
       saveDatabase();
       return message.reply(`✅ Limite de elenco definido para **${limit}**.`);
@@ -476,7 +563,7 @@ client.on('messageCreate', async (message) => {
       const role = message.mentions.roles.first();
       const emoji = args[1];
 
-      if (!role || !emoji) return message.reply('❌ Uso correto: `%addteam @CargoDoTime :emoji:`');
+      if (!role || !emoji) return message.reply('❌ Uso correto: `addteam @CargoDoTime :emoji:`');
 
       db.teams = db.teams.filter(t => t.roleId !== role.id);
       db.teams.push({ roleId: role.id, emoji });
@@ -592,6 +679,7 @@ client.on('messageCreate', async (message) => {
               { name: ' ', value: `• 🔋 **Roster Cap** - \`${newRosterCount}/${db.rosterLimit}\`` }
             );
 
+prefixes => {
           if (marketChannel) await marketChannel.send({ embeds: [embed] }).catch(() => {});
 
           await dmMsg.edit({ content: `🎉 **Parabéns!** Você aceitou a proposta e agora é do **${teamRole.name}**!`, components: [] }).catch(() => {});
@@ -667,7 +755,7 @@ client.on('messageCreate', async (message) => {
   // COMANDO %roster
   if (command === 'roster') {
     const role = message.mentions.roles.first();
-    if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `%roster @Time`');
+    if (!role) return message.reply('❌ Mencione o cargo do time. Ex: `roster @Time`');
 
     await guild.members.fetch();
 
