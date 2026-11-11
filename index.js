@@ -13,7 +13,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
-// Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout do Render
+// Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout
 setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
 
 const app = express();
@@ -22,7 +22,6 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração de Persistência com a Lista Completa de Todos os Times
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
 const DEFAULT_TEAMS = [
@@ -88,8 +87,8 @@ let db = {
   teams: DEFAULT_TEAMS
 };
 
-// Lista para guardar agendamentos ativos na memória
 const activeSchedules = [];
+const entrosarCooldowns = new Map(); // Regista o cooldown de 3h para o %entrosar por utilizador
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -98,14 +97,11 @@ function loadDatabase() {
       const parsed = JSON.parse(data);
       db = { ...db, ...parsed };
       if (!db.teams || db.teams.length === 0) db.teams = DEFAULT_TEAMS;
-      console.log(`[DB] Dados carregados com sucesso! Times registrados: ${db.teams.length}`);
     } catch (e) {
-      console.error('[DB] Erro ao ler JSON, restaurando padrões...', e.message);
       db.teams = DEFAULT_TEAMS;
       saveDatabase();
     }
   } else {
-    console.log('[DB] league_config.json não encontrado. Criando novo com times padrão...');
     saveDatabase();
   }
 }
@@ -113,10 +109,7 @@ function loadDatabase() {
 function saveDatabase() {
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-    console.log(`[DB] Dados salvos com sucesso! Total de times guardados: ${db.teams.length}`);
-  } catch (e) {
-    console.error('[DB] Erro ao salvar dados:', e.message);
-  }
+  } catch (e) {}
 }
 
 loadDatabase();
@@ -145,14 +138,19 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
+// Função atualizada para incluir Administradores, Donos, Staff e Staff Em Teste
 function isStaffOrOwner(member) {
   if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
-  const staffRoleId = '1527141858239709234';
-  const ownerRoleId = '1526639797920075936';
-  return member.roles.cache.has(staffRoleId) || member.roles.cache.has(ownerRoleId);
+  
+  const adminAllowedRoles = [
+    '1558230381868752906', // Staff Em Teste
+    '1527141858239709234', // Staff
+    '1526639797920075936'  // Dono / Outro cargo pré-existente
+  ];
+
+  return adminAllowedRoles.some(roleId => member.roles.cache.has(roleId));
 }
 
-// Conversor de tempo flexível (ex: "30m", "2h", "1d")
 function parseIntervalToMs(intervalStr) {
   const regex = /^(\d+)([mhd])$/i;
   const match = intervalStr.match(regex);
@@ -178,15 +176,54 @@ client.on('messageCreate', async (message) => {
 
   const argsCheck = message.content.slice(1).trim().split(/ +/);
   const cmdCheck = argsCheck.shift().toLowerCase();
-  
-  const isAdminOrStaffCmd = ['setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados'].includes(cmdCheck);
+  const member = message.member;
 
-  if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd) {
+  // Comando público de entretenimento: %entrosar (Apenas no canal 1526123188101320837)
+  if (cmdCheck === 'entrosar') {
+    const targetEntrosarChannel = '1526123188101320837';
+    if (message.channel.id !== targetEntrosarChannel) {
+      const tempMsg = await message.reply(`⚠️ O comando \`%entrosar\` só pode ser usado no canal <#${targetEntrosarChannel}>!`);
+      setTimeout(() => {
+        message.delete().catch(() => {});
+        tempMsg.delete().catch(() => {});
+      }, 5000);
+      return;
+    }
+
+    // Verificar Cooldown de 3 horas (10800000 ms)
+    const now = Date.now();
+    const cooldownTime = 3 * 60 * 60 * 1000;
+    if (entrosarCooldowns.has(member.id)) {
+      const expirationTime = entrosarCooldowns.get(member.id) + cooldownTime;
+      if (now < expirationTime) {
+        const timeLeft = Math.ceil((expirationTime - now) / (60 * 1000));
+        const hoursLeft = (timeLeft / 60).toFixed(1);
+        return message.reply(`⏳ Calma aí! Você precisa esperar mais aprox. **${hoursLeft} horas** para usar o \`%entrosar\` novamente.`);
+      }
+    }
+
+    entrosarCooldowns.set(member.id, now);
+
+    // Roleta de 50% de chance (Sim ou Não)
+    const chance = Math.random();
+    if (chance < 0.5) {
+      return message.reply('✅ Permissão para entrosar liberada!');
+    } else {
+      return message.reply('⛔ Permissão para entrosar negada!');
+    }
+  }
+
+  // Restrição geral de canal de comandos para utilizadores normais (Staff/Admin passam livremente)
+  const isAdminOrStaffCmd = [
+    'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
+    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'tutorial'
+  ].includes(cmdCheck);
+
+  if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
     const targetChannel = message.guild.channels.cache.get(db.commandsChannelId);
     const channelMention = targetChannel ? `${targetChannel}` : 'no canal correto';
 
     const tempMsg = await message.reply(`⚠️ Você só pode usar comandos em ${channelMention}!`);
-    
     setTimeout(() => {
       message.delete().catch(() => {});
       tempMsg.delete().catch(() => {});
@@ -203,9 +240,7 @@ client.on('messageCreate', async (message) => {
       if (!marketMsg) return message.reply('❌ Digite a sua mensagem. Ex: `!freeagency Procuro time de atacante`');
 
       const faChannel = message.guild.channels.cache.get(db.faChannelId);
-      if (!faChannel) {
-        return message.reply('❌ Canal de Free Agency não configurado!');
-      }
+      if (!faChannel) return message.reply('❌ Canal de Free Agency não configurado!');
 
       const embed = new EmbedBuilder()
         .setColor(0xFFD700)
@@ -221,13 +256,38 @@ client.on('messageCreate', async (message) => {
 
   const args = message.content.slice(1).trim().split(/ +/);
   const command = args.shift().toLowerCase();
-  const member = message.member;
   const guild = message.guild;
 
-  if (['abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 'setownercargos', 'addteam', 'addteams', 'removeteam', 'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados'].includes(command)) {
+  const adminCommandsList = [
+    'abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 
+    'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
+    'setownercargos', 'addteam', 'addteams', 'removeteam', 
+    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'tutorial'
+  ];
+
+  if (adminCommandsList.includes(command)) {
     
-    if (!member.permissions.has(PermissionsBitField.Flags.Administrator) && !isStaffOrOwner(member)) {
-      return message.reply('❌ Apenas Administradores ou membros da Staff/Donos podem usar este comando.');
+    if (!isStaffOrOwner(member)) {
+      return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
+    }
+
+    // COMANDO %tutorial (Exclusivo para administradores/staff)
+    if (command === 'tutorial') {
+      const embedTutorial = new EmbedBuilder()
+        .setColor(0x00AE86)
+        .setTitle('📚 Tutorial Completo - Federation Café Bot')
+        .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
+        .addFields(
+          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal` - Define o canal exclusivo de comandos.\n• `%setmarketchannel #canal` - Define o canal de transferências/mercado.\n• `%setfachannel #canal` - Define o canal de Free Agency.\n• `%setblacklistchannel #canal` - Define o canal de blacklists.\n• `%abrirjanela` / `%fecharjanela` - Abre ou fecha o mercado de transferências.\n• `%setrosterlimit <número>` - Define o limite de jogadores por elenco.' },
+          { name: '🛡️ Moderação, Punições e Blacklist', value: '• `%warn @usuario <motivo>` - Sistema progressivo (Warn 1: 1h mute | Warn 2: 1d mute + Cargo 2 | Warn 3: 1sem mute + Cargo 3).\n• `%black @usuario <motivo> <tempo> <robux> <pix>` - Regista blacklist, envia embed e bane o utilizador automaticamente.\n• `%unblack @usuario C <motivo>` - Regista apelação, desbane o utilizador caso aprovado.' },
+          { name: '📅 Agendamento de Mensagens', value: '• `%agendar #canal <mensagem> <tempoInício> <intervalo>` - Agenda mensagens recorrentes (ex: `0` para agora e `30m` para repetir).\n• `%listagendados` - Lista todos os agendamentos ativos e IDs.\n• `%desagendar <#ID>` - Cancela e remove um agendamento.' },
+          { name: '⚽ Gestão de Times e Elencos', value: '• `%teams` - Mostra a lista completa de todos os times e emojis registados.\n• `%roster @CargoDoTime` - Mostra os jogadores alocados num time.\n• `%addteam @Cargo :emoji:` / `%addteams` - Regista novos times na base de dados.' },
+          { name: '🔄 Comandos de Mercado (Coaches/Jogadores)', value: '• `%sign @jogador` - Envia proposta no privado do jogador (com botões de aceitar/recusar).\n• `%release @jogador` - Dispensa o jogador do seu time.\n• `%demand` - Permite ao jogador sair voluntariamente do time atual.\n• `!freeagency <mensagem>` (ou `!fa`) - Publica anúncio de Free Agent no canal configurado.' },
+          { name: '🎉 Outros', value: '• `%entrosar` - Comando divertido (50% chance de aceitar/negar) com intervalo de 3 horas, utilizável apenas no canal <#1526123188101320837>.' }
+        )
+        .setFooter({ text: 'Federation Café - Todos os direitos reservados.' });
+
+      return message.reply({ embeds: [embedTutorial] });
     }
 
     if (command === 'setcommandschannel') {
@@ -317,9 +377,7 @@ client.on('messageCreate', async (message) => {
       if (!motivoVal) motivoVal = 'Não especificado';
 
       const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
-      if (!blacklistChannel) {
-        return message.reply('❌ Canal de Blacklist não configurado!');
-      }
+      if (!blacklistChannel) return message.reply('❌ Canal de Blacklist não configurado!');
 
       const robuxEmoji = '<:robux:1553191661545193603>';
       const pixEmoji = '<:pix:1560853388034445485>';
@@ -360,22 +418,16 @@ client.on('messageCreate', async (message) => {
         targetUser = await client.users.fetch(cleanId).catch(() => null);
       }
 
-      if (!targetUser) {
-        return message.reply('❌ Mencione o jogador. Ex: `%unblack @docarabanido C Pagou`');
-      }
+      if (!targetUser) return message.reply('❌ Mencione o jogador. Ex: `%unblack @docarabanido C Pagou`');
 
       const nonMentionArgs = args.filter(a => !a.includes(targetUser.id) && !a.startsWith('<@'));
-      if (nonMentionArgs.length < 2) {
-        return message.reply('❌ Formato incorreto!');
-      }
+      if (nonMentionArgs.length < 2) return message.reply('❌ Formato incorreto!');
 
       const statusLetter = nonMentionArgs.shift().toUpperCase();
       const statusText = nonMentionArgs.join(' ');
 
       const blacklistChannel = guild.channels.cache.get(db.blacklistChannelId);
-      if (!blacklistChannel) {
-        return message.reply('❌ Canal de Blacklist não configurado!');
-      }
+      if (!blacklistChannel) return message.reply('❌ Canal de Blacklist não configurado!');
 
       let emojiStatus = statusLetter === 'C' ? '✅' : '❌';
       let estadoFinal = statusLetter === 'C' && statusText.toLowerCase() === 'pagou' ? 'Retirada.' : statusText;
@@ -421,9 +473,7 @@ client.on('messageCreate', async (message) => {
       const hasWarn2 = targetMember.roles.cache.has(roleWarn2);
       const hasWarn3 = targetMember.roles.cache.has(roleWarn3);
 
-      if (hasWarn3) {
-        return message.reply(`⚠️ O usuário ${targetUser} **já possui Warn 3**.`);
-      }
+      if (hasWarn3) return message.reply(`⚠️ O usuário ${targetUser} **já possui Warn 3**.`);
 
       try {
         if (hasWarn2) {
@@ -449,13 +499,11 @@ client.on('messageCreate', async (message) => {
     // COMANDO %agendar
     if (command === 'agendar') {
       const targetChannel = message.mentions.channels.first();
-      if (!targetChannel) {
-        return message.reply('❌ Mencione o canal. Ex: `%agendar #geral Olá mundo 0 30m`');
-      }
+      if (!targetChannel) return message.reply('❌ Mencione o canal. Ex: `%agendar #geral Olá mundo 0 30m`');
 
       const cleanArgs = args.filter(arg => !arg.startsWith('<#'));
       if (cleanArgs.length < 3) {
-        return message.reply('❌ Faltam dados! Uso correto: `%agendar #canal Sua Mensagem [TempoParaComeçar] [IntervaloRepetição]`\nExemplo: `%agendar #geral Boa tarde! 0 30m`');
+        return message.reply('❌ Faltam dados! Uso correto: `%agendar #canal Sua Mensagem [TempoParaComeçar] [IntervaloRepetição]`');
       }
 
       const intervalStr = cleanArgs.pop(); 
@@ -466,7 +514,7 @@ client.on('messageCreate', async (message) => {
       const intervalMs = parseIntervalToMs(intervalStr);
 
       if (initialDelayMs === null || intervalMs === null) {
-        return message.reply('❌ Formato de tempo inválido! Use por exemplo `5m` (minutos), `2h` (horas) ou `0` (agora).');
+        return message.reply('❌ Formato de tempo inválido! Use por exemplo `5m`, `2h` ou `0`.');
       }
 
       const scheduleId = Math.floor(1000 + Math.random() * 9000); 
@@ -491,45 +539,29 @@ client.on('messageCreate', async (message) => {
         intervalRef: null
       });
 
-      return message.reply(`✅ Mensagem agendada com sucesso! **ID do Agendamento: #${scheduleId}**\n• Início em: \`${initialDelayStr}\`\n• Repetição a cada: \`${intervalStr}\``);
+      return message.reply(`✅ Mensagem agendada! **ID: #${scheduleId}**`);
     }
 
-    // COMANDO %listagendados
     if (command === 'listagendados') {
-      if (activeSchedules.length === 0) {
-        return message.reply('📋 Não há mensagens agendadas no momento.');
-      }
-
-      const lista = activeSchedules.map(s => `• **ID #${s.id}** -> Canal: <#${s.channelId}> | Mensagem: "${s.content.substring(0, 30)}..."`).join('\n');
-      const embed = new EmbedBuilder()
-        .setColor(0x0099FF)
-        .setTitle('📅 Mensagens Agendadas Ativas')
-        .setDescription(lista);
-
+      if (activeSchedules.length === 0) return message.reply('📋 Não há mensagens agendadas.');
+      const lista = activeSchedules.map(s => `• **ID #${s.id}** -> Canal: <#${s.channelId}>`).join('\n');
+      const embed = new EmbedBuilder().setColor(0x0099FF).setTitle('📅 Mensagens Agendadas').setDescription(lista);
       return message.reply({ embeds: [embed] });
     }
 
-    // COMANDO %desagendar
     if (command === 'desagendar') {
       const idArg = args[0];
-      if (!idArg) {
-        return message.reply('❌ Indique o ID do agendamento. Use `%listagendados` para ver os IDs.');
-      }
-
+      if (!idArg) return message.reply('❌ Indique o ID. Use `%listagendados`.');
       const cleanId = parseInt(idArg.replace('#', ''));
       const index = activeSchedules.findIndex(s => s.id === cleanId);
-
-      if (index === -1) {
-        return message.reply(`❌ Nenhum agendamento encontrado com o ID #${cleanId}.`);
-      }
+      if (index === -1) return message.reply(`❌ Agendamento #${cleanId} não encontrado.`);
 
       const sched = activeSchedules[index];
       clearTimeout(sched.timeoutRef);
       if (sched.intervalRef) clearInterval(sched.intervalRef);
-
       activeSchedules.splice(index, 1);
 
-      return message.reply(`🗑️ Agendamento **#${cleanId}** cancelado com sucesso!`);
+      return message.reply(`🗑️ Agendamento **#${cleanId}** cancelado!`);
     }
 
     if (command === 'setrosterlimit') {
@@ -595,7 +627,6 @@ client.on('messageCreate', async (message) => {
     return message.reply('🔒 **Mercado Fechado!**');
   }
 
-  // COMANDO %sign
   if (command === 'sign') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem fazer ofertas.');
     const team = getUserTeam(member);
@@ -645,7 +676,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // COMANDO %release
   if (command === 'release') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners.');
     const team = getUserTeam(member);
@@ -663,7 +693,6 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Jogador dispensado.`);
   }
 
-  // COMANDO %demand
   if (command === 'demand') {
     const team = getUserTeam(member);
     if (!team) return message.reply('❌ Você não tem time.');
@@ -675,7 +704,6 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Você saiu do time.`);
   }
 
-  // COMANDO %roster
   if (command === 'roster') {
     const role = message.mentions.roles.first();
     if (!role) return message.reply('❌ Mencione o cargo do time.');
@@ -685,7 +713,6 @@ client.on('messageCreate', async (message) => {
     return message.reply({ embeds: [embed] });
   }
 
-  // COMANDO %teams
   if (command === 'teams' || command === 'times') {
     if (db.teams.length === 0) return message.reply('📋 Nenhum time.');
     const lista = db.teams.map((t, index) => `${index + 1}. ${t.emoji} <@&${t.roleId}>`).join('\n');
@@ -694,21 +721,15 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Autenticação com atraso de segurança para estabilização no Render
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
 if (!token) {
-  console.error('[ERRO CRÍTICO]: A variável de ambiente TOKEN não foi encontrada no Render!');
+  console.error('[ERRO CRÍTICO]: A variável de ambiente TOKEN não foi encontrada!');
 } else {
   console.log('[Discord] A aguardar estabilização do servidor para iniciar sessão...');
-  
   setTimeout(() => {
-    console.log('[Discord] A tentar ligar ao Discord agora...');
-    client.login(token).then(() => {
-      console.log(`[Discord] ✅ Conexão efetuada com sucesso!`);
-    }).catch(err => {
-      console.error('[ERRO DISCORD LOGIN]: Falha crítica ao ligar ao Discord!');
-      console.error(err);
+    client.login(token).catch(err => {
+      console.error('[ERRO DISCORD LOGIN]: Falha ao ligar ao Discord!', err);
     });
   }, 3000);
 }
