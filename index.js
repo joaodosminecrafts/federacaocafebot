@@ -694,15 +694,21 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Autenticação com registo detalhado de erros de conexão
+// Autenticação com atraso de segurança para estabilização no Render
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
 if (!token) {
   console.error('[ERRO CRÍTICO]: A variável de ambiente TOKEN não foi encontrada no Render!');
 } else {
-  console.log('[Discord] A tentar iniciar sessão com o token fornecido...');
-  client.login(token).catch(err => {
-    console.error('[ERRO DISCORD LOGIN]: Falha ao ligar ao Discord!');
-    console.error(err);
-  });
+  console.log('[Discord] A aguardar estabilização do servidor para iniciar sessão...');
+  
+  setTimeout(() => {
+    console.log('[Discord] A tentar ligar ao Discord agora...');
+    client.login(token).then(() => {
+      console.log(`[Discord] ✅ Conexão efetuada com sucesso!`);
+    }).catch(err => {
+      console.error('[ERRO DISCORD LOGIN]: Falha crítica ao ligar ao Discord!');
+      console.error(err);
+    });
+  }, 3000);
 }
