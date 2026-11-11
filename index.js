@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
-// Configuração de Persistência com a Lista Completa de Todos los Times
+// Configuração de Persistência com a Lista Completa de Todos os Times
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
 const DEFAULT_TEAMS = [
@@ -446,21 +446,20 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // NOVO COMANDO %agendar (Simplificado por contagem regressiva para evitar erros de fuso)
-    // Exemplo: %agendar #canal Olá galera 10m 1h (Envia daqui a 10 minutos, repetindo a cada 1 hora)
+    // COMANDO %agendar
     if (command === 'agendar') {
       const targetChannel = message.mentions.channels.first();
       if (!targetChannel) {
-        return message.reply('❌ Mencione o canal. Ex: `%agendar #geral Olá mundo 5m 1h`');
+        return message.reply('❌ Mencione o canal. Ex: `%agendar #geral Olá mundo 0 30m`');
       }
 
       const cleanArgs = args.filter(arg => !arg.startsWith('<#'));
       if (cleanArgs.length < 3) {
-        return message.reply('❌ Faltam dados! Uso correto: `%agendar #canal Sua Mensagem [TempoParaComeçar] [IntervaloRepetição]`\nExemplo: `%agendar #geral Boa tarde! 0 30m` (começa agora, repete a cada 30 min)');
+        return message.reply('❌ Faltam dados! Uso correto: `%agendar #canal Sua Mensagem [TempoParaComeçar] [IntervaloRepetição]`\nExemplo: `%agendar #geral Boa tarde! 0 30m`');
       }
 
-      const intervalStr = cleanArgs.pop(); // ex: 1h
-      const initialDelayStr = cleanArgs.pop(); // ex: 10m ou 0
+      const intervalStr = cleanArgs.pop(); 
+      const initialDelayStr = cleanArgs.pop(); 
       const msgContent = cleanArgs.join(' ');
 
       const initialDelayMs = parseIntervalToMs(initialDelayStr);
@@ -470,9 +469,8 @@ client.on('messageCreate', async (message) => {
         return message.reply('❌ Formato de tempo inválido! Use por exemplo `5m` (minutos), `2h` (horas) ou `0` (agora).');
       }
 
-      const scheduleId = Math.floor(1000 + Math.random() * 9000); // ID de 4 dígitos
+      const scheduleId = Math.floor(1000 + Math.random() * 9000); 
 
-      // Cria a tarefa agendada
       const timerObj = setTimeout(() => {
         targetChannel.send(msgContent).catch(() => {});
 
@@ -480,7 +478,6 @@ client.on('messageCreate', async (message) => {
           targetChannel.send(msgContent).catch(() => {});
         }, intervalMs);
 
-        // Guarda a referência para permitir cancelamento futuro
         const index = activeSchedules.findIndex(s => s.id === scheduleId);
         if (index !== -1) activeSchedules[index].intervalRef = intervalObj;
 
@@ -497,7 +494,7 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Mensagem agendada com sucesso! **ID do Agendamento: #${scheduleId}**\n• Início em: \`${initialDelayStr}\`\n• Repetição a cada: \`${intervalStr}\``);
     }
 
-    // NOVO COMANDO %listagendados (Mostra todos os agendamentos ativos)
+    // COMANDO %listagendados
     if (command === 'listagendados') {
       if (activeSchedules.length === 0) {
         return message.reply('📋 Não há mensagens agendadas no momento.');
@@ -512,11 +509,11 @@ client.on('messageCreate', async (message) => {
       return message.reply({ embeds: [embed] });
     }
 
-    // NOVO COMANDO %desagendar <ID> (Cancela um agendamento)
+    // COMANDO %desagendar
     if (command === 'desagendar') {
       const idArg = args[0];
       if (!idArg) {
-        return message.reply('❌ Indique o ID do agendamento. Use `%listagendados` para ver os IDs. Ex: `%desagendar 4821`');
+        return message.reply('❌ Indique o ID do agendamento. Use `%listagendados` para ver os IDs.');
       }
 
       const cleanId = parseInt(idArg.replace('#', ''));
@@ -610,7 +607,7 @@ client.on('messageCreate', async (message) => {
     if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador já pertence a uma equipe!`);
 
     const teamRole = guild.roles.cache.get(team.roleId);
-    if (teamRole.members.size >= db.rosterLimit) return message.reply(`🔋 **Elenco Cheio!**`);
+    if (teamRole && teamRole.members.size >= db.rosterLimit) return message.reply(`🔋 **Elenco Cheio!**`);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
@@ -619,7 +616,7 @@ client.on('messageCreate', async (message) => {
 
     try {
       const dmMsg = await targetUser.send({
-        content: `📝 Proposta oficial para o **${teamRole.name}** (${team.emoji}) enviada por **${member.user.username}**!`,
+        content: `📝 Proposta oficial para o **${teamRole ? teamRole.name : 'Time'}** (${team.emoji}) enviada por **${member.user.username}**!`,
         components: [row]
       });
       await message.reply(`📩 Proposta enviada no privado!`);
@@ -632,15 +629,15 @@ client.on('messageCreate', async (message) => {
           return;
         }
         if (i.customId === 'accept_offer') {
-          if (!db.marketOpen || teamRole.members.size >= db.rosterLimit) return;
-          await targetMember.roles.add(teamRole).catch(() => {});
+          if (!db.marketOpen || (teamRole && teamRole.members.size >= db.rosterLimit)) return;
+          if (teamRole) await targetMember.roles.add(teamRole).catch(() => {});
           const marketChannel = guild.channels.cache.get(db.marketChannelId);
           const embed = new EmbedBuilder()
             .setColor(0xFF0000)
             .setTitle('Offer Accepted')
             .setDescription(`<@${targetUser.id}> entrou para ${team.emoji} <@&${team.roleId}>`);
           if (marketChannel) await marketChannel.send({ embeds: [embed] }).catch(() => {});
-          await dmMsg.edit({ content: `🎉 Parabéns! Você agora é do **${teamRole.name}**!`, components: [] }).catch(() => {});
+          await dmMsg.edit({ content: `🎉 Parabéns! Você agora é do **${teamRole ? teamRole.name : 'Time'}**!`, components: [] }).catch(() => {});
         }
       });
     } catch (err) {
@@ -659,7 +656,7 @@ client.on('messageCreate', async (message) => {
     if (!targetMember || !targetMember.roles.cache.has(team.roleId)) return message.reply('❌ O jogador não é do seu time.');
 
     const teamRole = guild.roles.cache.get(team.roleId);
-    await targetMember.roles.remove(teamRole);
+    if (teamRole) await targetMember.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
     const embed = new EmbedBuilder().setColor(0x888888).setTitle('Player Released').setDescription(`<@${targetUser.id}> dispensado de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
@@ -671,7 +668,7 @@ client.on('messageCreate', async (message) => {
     const team = getUserTeam(member);
     if (!team) return message.reply('❌ Você não tem time.');
     const teamRole = guild.roles.cache.get(team.roleId);
-    await member.roles.remove(teamRole);
+    if (teamRole) await member.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
     const embed = new EmbedBuilder().setColor(0xFFA500).setTitle('Contract Terminated').setDescription(`<@${member.id}> saiu de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
@@ -697,7 +694,15 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+// Autenticação com registo detalhado de erros de conexão
 const token = process.env.TOKEN ? process.env.TOKEN.trim() : null;
-if (token) {
-  client.login(token).catch(err => console.error('[ERRO DISCORD LOGIN]:', err.message));
+
+if (!token) {
+  console.error('[ERRO CRÍTICO]: A variável de ambiente TOKEN não foi encontrada no Render!');
+} else {
+  console.log('[Discord] A tentar iniciar sessão com o token fornecido...');
+  client.login(token).catch(err => {
+    console.error('[ERRO DISCORD LOGIN]: Falha ao ligar ao Discord!');
+    console.error(err);
+  });
 }
