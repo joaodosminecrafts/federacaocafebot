@@ -89,6 +89,7 @@ let db = {
 
 const activeSchedules = [];
 const entrosarCooldowns = new Map(); // Regista o cooldown de 3h para o %entrosar por utilizador
+const narratedGames = []; // Regista os jogos narrados com ID único: { id, matchKey, emoji1, emoji2, transmissora, narratorId }
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -178,6 +179,76 @@ client.on('messageCreate', async (message) => {
   const cmdCheck = argsCheck.shift().toLowerCase();
   const member = message.member;
 
+  // COMANDO %narrar (Apenas cargo 1527044059976175738 e canal 1553887041689751664)
+  if (cmdCheck === 'narrar') {
+    const targetNarrarChannel = '1553887041689751664';
+    const allowedNarrarRole = '1527044059976175738';
+
+    if (message.channel.id !== targetNarrarChannel) {
+      const tempMsg = await message.reply(`⚠️ O comando \`%narrar\` só pode ser usado no canal <#${targetNarrarChannel}>!`);
+      setTimeout(() => {
+        message.delete().catch(() => {});
+        tempMsg.delete().catch(() => {});
+      }, 5000);
+      return;
+    }
+
+    if (!member.roles.cache.has(allowedNarrarRole) && !member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply('❌ Apenas quem possui o cargo de Narrador pode usar este comando.');
+    }
+
+    if (argsCheck.length < 3) {
+      return message.reply('❌ Formato incorreto! Uso: `%narrar :emoji1: :emoji2: NomeDaTransmissora`');
+    }
+
+    const emoji1 = argsCheck[0];
+    const emoji2 = argsCheck[1];
+    const transmissora = argsCheck.slice(2).join(' ');
+
+    // Cria uma chave única ordenada para impedir o mesmo jogo mesmo se a ordem dos emojis for invertida
+    const matchKey = [emoji1, emoji2].sort().join('_VS_');
+
+    if (narratedGames.some(g => g.matchKey === matchKey)) {
+      return message.reply('⚠️ Esse jogo já vai ser narrado!');
+    }
+
+    const narrationId = Math.floor(1000 + Math.random() * 9000);
+
+    narratedGames.push({
+      id: narrationId,
+      matchKey,
+      emoji1,
+      emoji2,
+      transmissora,
+      narratorId: member.id
+    });
+
+    const formattedMsg = 
+      `## ☕ | BroadCaster 🎥\n` +
+      `**Game: ( ${emoji1} ⚔️ ${emoji2} )**\n\n\n` +
+      `**BroadCaster:** <u>        ${transmissora}        </u>`;
+
+    return message.channel.send(formattedMsg);
+  }
+
+  // COMANDO %listanarracoes (Todos podem usar)
+  if (cmdCheck === 'listanarracoes') {
+    if (narratedGames.length === 0) {
+      return message.reply('📋 Não há jogos registados para narração no momento.');
+    }
+
+    const lista = narratedGames.map(g => 
+      `• **ID #${g.id}** -> ${g.emoji1} ⚔️ ${g.emoji2} | **${g.transmissora}** (<@${g.narratorId}>)`
+    ).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0x0099FF)
+      .setTitle('🎙️ Jogos Agendados para Narração')
+      .setDescription(lista);
+
+    return message.reply({ embeds: [embed] });
+  }
+
   // Comando público de entretenimento: %entrosar (Apenas no canal 1526123188101320837)
   if (cmdCheck === 'entrosar') {
     const targetEntrosarChannel = '1526123188101320837';
@@ -216,7 +287,7 @@ client.on('messageCreate', async (message) => {
   // Restrição geral de canal de comandos para utilizadores normais (Staff/Admin passam livremente)
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
-    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'tutorial'
+    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes', 'tutorial'
   ].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
@@ -262,13 +333,31 @@ client.on('messageCreate', async (message) => {
     'abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 
     'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
     'setownercargos', 'addteam', 'addteams', 'removeteam', 
-    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'tutorial'
+    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes', 'tutorial'
   ];
 
   if (adminCommandsList.includes(command)) {
     
     if (!isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
+    }
+
+    // COMANDO %limparnarracoes (Apenas Administradores/Staffs - remove por ID ou 'tudo')
+    if (command === 'limparnarracoes') {
+      const idArg = args[0];
+      if (!idArg) return message.reply('❌ Indique o ID da narração ou digite `tudo`. Ex: `%limparnarracoes #1234` ou `%limparnarracoes tudo`. Use `%listanarracoes` para ver os IDs.');
+
+      if (idArg.toLowerCase() === 'tudo' || idArg.toLowerCase() === 'all') {
+        narratedGames.length = 0;
+        return message.reply('🗑️ Todas as narrações foram removidas da lista!');
+      }
+
+      const cleanId = parseInt(idArg.replace('#', ''));
+      const index = narratedGames.findIndex(g => g.id === cleanId);
+      if (index === -1) return message.reply(`❌ Narração #${cleanId} não encontrada.`);
+
+      narratedGames.splice(index, 1);
+      return message.reply(`🗑️ Narração **#${cleanId}** removida com sucesso!`);
     }
 
     // COMANDO %tutorial (Exclusivo para administradores/staff)
@@ -283,7 +372,7 @@ client.on('messageCreate', async (message) => {
           { name: '📅 Agendamento de Mensagens', value: '• `%agendar #canal <mensagem> <tempoInício> <intervalo>` - Agenda mensagens recorrentes (ex: `0` para agora e `30m` para repetir).\n• `%listagendados` - Lista todos os agendamentos ativos e IDs.\n• `%desagendar <#ID>` - Cancela e remove um agendamento.' },
           { name: '⚽ Gestão de Times e Elencos', value: '• `%teams` - Mostra a lista completa de todos os times e emojis registados.\n• `%roster @CargoDoTime` - Mostra os jogadores alocados num time.\n• `%addteam @Cargo :emoji:` / `%addteams` - Regista novos times na base de dados.' },
           { name: '🔄 Comandos de Mercado (Coaches/Jogadores)', value: '• `%sign @jogador` - Envia proposta no privado do jogador (com botões de aceitar/recusar).\n• `%release @jogador` - Dispensa o jogador do seu time.\n• `%demand` - Permite ao jogador sair voluntariamente do time atual.\n• `!freeagency <mensagem>` (ou `!fa`) - Publica anúncio de Free Agent no canal configurado.' },
-          { name: '🎉 Outros', value: '• `%entrosar` - Comando divertido (50% chance de aceitar/negar) com intervalo de 3 horas, utilizável apenas no canal <#1526123188101320837>.' }
+          { name: '🎙️ Transmissões e Outros', value: '• `%narrar :emoji1: :emoji2: Transmissora` - Reserva e anuncia a transmissão de um jogo (cargo <@&1527044059976175738> no canal <#1553887041689751664>).\n• `%listanarracoes` - Lista todos os jogos agendados para narração e os seus IDs (todos podem usar).\n• `%limparnarracoes <#ID ou tudo>` - Remove uma narração pelo ID ou limpa todas (apenas Admin/Staff).\n• `%entrosar` - Comando divertido (50% chance de aceitar/negar) com intervalo de 3 horas, utilizável apenas no canal <#1526123188101320837>.' }
         )
         .setFooter({ text: 'Federation Café - Todos os direitos reservados.' });
 
