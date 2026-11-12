@@ -88,8 +88,8 @@ let db = {
 };
 
 const activeSchedules = [];
-const entrosarCooldowns = new Map(); // Regista o cooldown de 3h para o %entrosar por utilizador
-const narratedGames = []; // Regista os jogos narrados com ID único: { id, matchKey, emoji1, emoji2, transmissora, narratorId }
+const entrosarCooldowns = new Map(); 
+const narratedGames = []; 
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -139,7 +139,6 @@ function isCoach(member) {
   return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
 }
 
-// Função atualizada para incluir Administradores, Donos, Staff e Staff Em Teste
 function isStaffOrOwner(member) {
   if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
   
@@ -179,7 +178,7 @@ client.on('messageCreate', async (message) => {
   const cmdCheck = argsCheck.shift().toLowerCase();
   const member = message.member;
 
-  // COMANDO %narrar (Apenas cargo 1527044059976175738 e canal 1553887041689751664)
+  // COMANDO %narrar
   if (cmdCheck === 'narrar') {
     const targetNarrarChannel = '1553887041689751664';
     const allowedNarrarRole = '1527044059976175738';
@@ -205,7 +204,6 @@ client.on('messageCreate', async (message) => {
     const emoji2 = argsCheck[1];
     const transmissora = argsCheck.slice(2).join(' ');
 
-    // Cria uma chave única ordenada para impedir o mesmo jogo mesmo se a ordem dos emojis for invertida
     const matchKey = [emoji1, emoji2].sort().join('_VS_');
 
     if (narratedGames.some(g => g.matchKey === matchKey)) {
@@ -226,12 +224,12 @@ client.on('messageCreate', async (message) => {
     const formattedMsg = 
       `## ☕ | BroadCaster 🎥\n` +
       `**Game: ( ${emoji1} ⚔️ ${emoji2} )**\n\n\n` +
-      `**BroadCaster:** <u>        ${transmissora}        </u>`;
+      `**BroadCaster:** __${transmissora}__`;
 
     return message.channel.send(formattedMsg);
   }
 
-  // COMANDO %listanarracoes (Todos podem usar)
+  // COMANDO %listanarracoes
   if (cmdCheck === 'listanarracoes') {
     if (narratedGames.length === 0) {
       return message.reply('📋 Não há jogos registados para narração no momento.');
@@ -249,7 +247,7 @@ client.on('messageCreate', async (message) => {
     return message.reply({ embeds: [embed] });
   }
 
-  // Comando público de entretenimento: %entrosar (Apenas no canal 1526123188101320837)
+  // COMANDO %entrosar
   if (cmdCheck === 'entrosar') {
     const targetEntrosarChannel = '1526123188101320837';
     if (message.channel.id !== targetEntrosarChannel) {
@@ -261,7 +259,6 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    // Verificar Cooldown de 3 horas (10800000 ms)
     const now = Date.now();
     const cooldownTime = 3 * 60 * 60 * 1000;
     if (entrosarCooldowns.has(member.id)) {
@@ -275,7 +272,6 @@ client.on('messageCreate', async (message) => {
 
     entrosarCooldowns.set(member.id, now);
 
-    // Roleta de 50% de chance (Sim ou Não)
     const chance = Math.random();
     if (chance < 0.5) {
       return message.reply('✅ Permissão para entrosar liberada!');
@@ -284,7 +280,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Restrição geral de canal de comandos para utilizadores normais (Staff/Admin passam livremente)
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes', 'tutorial'
@@ -342,7 +337,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
     }
 
-    // COMANDO %limparnarracoes (Apenas Administradores/Staffs - remove por ID ou 'tudo')
+    // COMANDO %limparnarracoes
     if (command === 'limparnarracoes') {
       const idArg = args[0];
       if (!idArg) return message.reply('❌ Indique o ID da narração ou digite `tudo`. Ex: `%limparnarracoes #1234` ou `%limparnarracoes tudo`. Use `%listanarracoes` para ver os IDs.');
@@ -360,7 +355,7 @@ client.on('messageCreate', async (message) => {
       return message.reply(`🗑️ Narração **#${cleanId}** removida com sucesso!`);
     }
 
-    // COMANDO %tutorial (Exclusivo para administradores/staff)
+    // COMANDO %tutorial
     if (command === 'tutorial') {
       const embedTutorial = new EmbedBuilder()
         .setColor(0x00AE86)
