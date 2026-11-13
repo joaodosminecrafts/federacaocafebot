@@ -167,8 +167,54 @@ function parseIntervalToMs(intervalStr) {
 }
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.guild) return;
+  // DETECTOR DE MENSAGEM INICIAL DO TICKET KING
+  if (message.author.bot && message.channel.name && message.channel.name.toLowerCase().startsWith('ticket-')) {
+    if (message.embeds.length > 0) {
+      const embedDesc = (message.embeds[0].description || '').toLowerCase();
+      const userMentionMatch = (message.embeds[0].description || '').match(/<@!?\d+>/);
+      const userMention = userMentionMatch ? userMentionMatch[0] : '';
 
+      if (embedDesc.includes('criou um novo ticket')) {
+        if (embedDesc.includes('parceria')) {
+          return message.channel.send(
+            `${userMention} 👋 **Atenção antes de aguardar atendimento:**\n` +
+            `📌 Envie agora o **texto da sua parceria** junto com o **link do seu servidor do Discord** (mínimo de 100 membros).`
+          );
+        } else if (embedDesc.includes('dúvida') || embedDesc.includes('duvida')) {
+          return message.channel.send(
+            `${userMention} 🤔 **Para agilizar o seu atendimento:**\n` +
+            `📌 Escreva a sua **dúvida completa** logo abaixo. Não mande apenas "oi" ou "olá"!`
+          );
+        } else if (embedDesc.includes('denúncia') || embedDesc.includes('denuncia')) {
+          return message.channel.send(
+            `${userMention} 🚨 **Para validar a sua denúncia:**\n` +
+            `📌 Envie o **ID/menção do acusado** e as **provas (prints ou vídeos)** agora mesmo.`
+          );
+        } else if (embedDesc.includes('inscrever') || embedDesc.includes('inscrição')) {
+          return message.channel.send(
+            `${userMention} Vagas fechadas!, não é possivel ownar, apenas é possível **pagar 5 reais ou 200 robux para Ficar na Fila De Espera pra próxima season ou para o próximo time que tomar Disband!**`
+          );
+        } else if (embedDesc.includes('compra')) {
+          return message.channel.send(
+            `${userMention} 🛒 **Atendimento de Compras:**\n` +
+            `📌 Informe **qual produto/pacote deseja adquirir** e a **forma de pagamento** (Robux ou Pix).`
+          );
+        } else if (embedDesc.includes('transmissor') || embedDesc.includes('narrador')) {
+          return message.channel.send(
+            `${userMention}\n` +
+            `☕| Narrador\n` +
+            `- Sabe colocar placar na tela?\n` +
+            `- Qual sua Plataforma?\n` +
+            `- Como você transmite?\n` +
+            `- Tem uma equipe?`
+          );
+        }
+      }
+    }
+    return;
+  }
+
+  if (message.author.bot || !message.guild) return;
   const isCmdPercent = message.content.startsWith('%');
   const isCmdExclamation = message.content.startsWith('!');
 
