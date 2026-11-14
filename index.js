@@ -90,6 +90,7 @@ let db = {
 const activeSchedules = [];
 const entrosarCooldowns = new Map(); 
 const narratedGames = []; 
+const pendingTickets = new Map(); // Guarda tickets aguardando a primeira mensagem do usuário
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -167,47 +168,24 @@ function parseIntervalToMs(intervalStr) {
 }
 
 client.on('messageCreate', async (message) => {
-  // DETECTOR DE MENSAGEM INICIAL DO TICKET KING
+  // 1. REGISTA O TIPO DE TICKET QUANDO O TICKET KING ABRE O CANAL
   if (message.author.bot && message.channel.name && message.channel.name.toLowerCase().startsWith('ticket-')) {
     if (message.embeds.length > 0) {
       const embedDesc = (message.embeds[0].description || '').toLowerCase();
-      const userMentionMatch = (message.embeds[0].description || '').match(/<@!?\d+>/);
-      const userMention = userMentionMatch ? userMentionMatch[0] : '';
+      const userIdMatch = (message.embeds[0].description || '').match(/<@!?(\d+)>/);
+      const openerId = userIdMatch ? userIdMatch[1] : null;
 
-      if (embedDesc.includes('criou um novo ticket')) {
-        if (embedDesc.includes('parceria')) {
-          return message.channel.send(
-            `${userMention} 👋 **Atenção antes de aguardar atendimento:**\n` +
-            `📌 Envie agora o **texto da sua parceria** junto com o **link do seu servidor do Discord** (mínimo de 100 membros).`
-          );
-        } else if (embedDesc.includes('dúvida') || embedDesc.includes('duvida')) {
-          return message.channel.send(
-            `${userMention} 🤔 **Para agilizar o seu atendimento:**\n` +
-            `📌 Escreva a sua **dúvida completa** logo abaixo. Não mande apenas "oi" ou "olá"!`
-          );
-        } else if (embedDesc.includes('denúncia') || embedDesc.includes('denuncia')) {
-          return message.channel.send(
-            `${userMention} 🚨 **Para validar a sua denúncia:**\n` +
-            `📌 Envie o **ID/menção do acusado** e as **provas (prints ou vídeos)** agora mesmo.`
-          );
-        } else if (embedDesc.includes('inscrever') || embedDesc.includes('inscrição')) {
-          return message.channel.send(
-            `${userMention} Vagas fechadas!, não é possivel ownar, apenas é possível **pagar 5 reais ou 200 robux para Ficar na Fila De Espera pra próxima season ou para o próximo time que tomar Disband!**`
-          );
-        } else if (embedDesc.includes('compra')) {
-          return message.channel.send(
-            `${userMention} 🛒 **Atendimento de Compras:**\n` +
-            `📌 Informe **qual produto/pacote deseja adquirir** e a **forma de pagamento** (Robux ou Pix).`
-          );
-        } else if (embedDesc.includes('transmissor') || embedDesc.includes('narrador')) {
-          return message.channel.send(
-            `${userMention}\n` +
-            `☕| Narrador\n` +
-            `- Sabe colocar placar na tela?\n` +
-            `- Qual sua Plataforma?\n` +
-            `- Como você transmite?\n` +
-            `- Tem uma equipe?`
-          );
+      if (embedDesc.includes('criou um novo ticket') && openerId) {
+        let ticketType = null;
+        if (embedDesc.includes('parceria')) ticketType = 'parceria';
+        else if (embedDesc.includes('dúvida') || embedDesc.includes('duvida')) ticketType = 'duvida';
+        else if (embedDesc.includes('denúncia') || embedDesc.includes('denuncia')) ticketType = 'denuncia';
+        else if (embedDesc.includes('inscrever') || embedDesc.includes('inscrição')) ticketType = 'inscrever';
+        else if (embedDesc.includes('compra')) ticketType = 'compra';
+        else if (embedDesc.includes('transmissor') || embedDesc.includes('narrador')) ticketType = 'transmissor';
+
+        if (ticketType) {
+          pendingTickets.set(message.channel.id, { openerId, type: ticketType });
         }
       }
     }
@@ -215,6 +193,58 @@ client.on('messageCreate', async (message) => {
   }
 
   if (message.author.bot || !message.guild) return;
+
+  // 2. RESPONDE APÓS A PRIMEIRA MENSAGEM DO USUÁRIO QUE ABRIU O TICKET
+  if (pendingTickets.has(message.channel.id)) {
+    const ticketData = pendingTickets.get(message.channel.id);
+    if (message.author.id === ticketData.openerId) {
+      pendingTickets.delete(message.channel.id); // Remove para não responder mais de uma vez
+
+      const footerNote = `\n\n-# Essa resposta é automática e não é modificada por IA.`;
+      const userMention = `<@${ticketData.openerId}>`;
+
+      if (ticketData.type === 'parceria') {
+        await message.reply(
+          `${userMention} 👋 **Atenção antes de aguardar atendimento:**\n` +
+          `📌 Envie agora o **texto da sua parceria** junto com o **link do seu servidor do Discord** (mínimo de 100 membros).` +
+          footerNote
+        );
+      } else if (ticketData.type === 'duvida') {
+        await message.reply(
+          `${userMention} 🤔 **Para agilizar o seu atendimento:**\n` +
+          `📌 Escreva a sua **dúvida completa** logo abaixo. Não mande apenas "oi" ou "olá"!` +
+          footerNote
+        );
+      } else if (ticketData.type === 'denuncia') {
+        await message.reply(
+          `${userMention} 🚨 **Para validar a sua denúncia:**\n` +
+          `📌 Envie o **ID/menção do acusado** e as **provas (prints ou vídeos)** agora mesmo.` +
+          footerNote
+        );
+      } else if (ticketData.type === 'inscrever') {
+        await message.reply(
+          `${userMention} Vagas fechadas!, não é possivel ownar, apenas é possível **pagar 5 reais ou 200 robux para Ficar na Fila De Espera pra próxima season ou para o próximo time que tomar Disband!**` +
+          footerNote
+        );
+      } else if (ticketData.type === 'compra') {
+        await message.reply(
+          `${userMention} 🛒 **Atendimento de Compras:**\n` +
+          `📌 Informe **qual produto/pacote deseja adquirir** e a **forma de pagamento** (Robux ou Pix).` +
+          footerNote
+        );
+      } else if (ticketData.type === 'transmissor') {
+        await message.reply(
+          `${userMention}\n` +
+          `☕| Narrador\n` +
+          `- Sabe colocar placar na tela?\n` +
+          `- Qual sua Plataforma?\n` +
+          `- Como você transmite?\n` +
+          `- Tem uma equipe?` +
+          footerNote
+        );
+      }
+    }
+  }
   const isCmdPercent = message.content.startsWith('%');
   const isCmdExclamation = message.content.startsWith('!');
 
