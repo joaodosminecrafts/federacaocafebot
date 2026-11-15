@@ -197,14 +197,12 @@ client.on('messageCreate', async (message) => {
 
   if (message.author.bot || !message.guild) return;
 
-  // 2. FILTRO AUTOMÁTICO DE PALAVRAS PROIBIDAS (Ignora Staff/Admins)
+// 2. FILTRO AUTOMÁTICO DE PALAVRAS PROIBIDAS (Apaga silenciosamente, ignora Staff/Admins)
   if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
     const contentLower = message.content.toLowerCase();
     const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word));
     if (hasBannedWord) {
       await message.delete().catch(() => {});
-      const warnMsg = await message.channel.send(`⚠️ ${message.author}, sua mensagem foi apagada pois contém uma palavra proibida no servidor!`);
-      setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
       return;
     }
   }
