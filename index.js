@@ -84,13 +84,14 @@ let db = {
   commandsChannelId: '', 
   rosterLimit: 20,
   ownerRoleIds: [], 
+  bannedWords: [],
   teams: DEFAULT_TEAMS
 };
 
 const activeSchedules = [];
 const entrosarCooldowns = new Map(); 
 const narratedGames = []; 
-const pendingTickets = new Map(); // Guarda tickets aguardando a primeira mensagem do usuário
+const pendingTickets = new Map(); 
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -99,8 +100,10 @@ function loadDatabase() {
       const parsed = JSON.parse(data);
       db = { ...db, ...parsed };
       if (!db.teams || db.teams.length === 0) db.teams = DEFAULT_TEAMS;
+      if (!Array.isArray(db.bannedWords)) db.bannedWords = [];
     } catch (e) {
       db.teams = DEFAULT_TEAMS;
+      db.bannedWords = [];
       saveDatabase();
     }
   } else {
@@ -194,11 +197,23 @@ client.on('messageCreate', async (message) => {
 
   if (message.author.bot || !message.guild) return;
 
-  // 2. RESPONDE APÓS A PRIMEIRA MENSAGEM DO USUÁRIO QUE ABRIU O TICKET
+  // 2. FILTRO AUTOMÁTICO DE PALAVRAS PROIBIDAS (Ignora Staff/Admins)
+  if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
+    const contentLower = message.content.toLowerCase();
+    const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word));
+    if (hasBannedWord) {
+      await message.delete().catch(() => {});
+      const warnMsg = await message.channel.send(`⚠️ ${message.author}, sua mensagem foi apagada pois contém uma palavra proibida no servidor!`);
+      setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
+      return;
+    }
+  }
+
+  // 3. RESPONDE APÓS A PRIMEIRA MENSAGEM DO USUÁRIO QUE ABRIU O TICKET
   if (pendingTickets.has(message.channel.id)) {
     const ticketData = pendingTickets.get(message.channel.id);
     if (message.author.id === ticketData.openerId) {
-      pendingTickets.delete(message.channel.id); // Remove para não responder mais de uma vez
+      pendingTickets.delete(message.channel.id);
 
       const footerNote = `\n\n-# Essa resposta é automática e não é modificada por IA.`;
       const userMention = `<@${ticketData.openerId}>`;
@@ -358,7 +373,8 @@ client.on('messageCreate', async (message) => {
 
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
-    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes', 'tutorial'
+    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
+    'addpalavra', 'removepalavra', 'listapalavras', 'tutorial'
   ].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
@@ -404,13 +420,45 @@ client.on('messageCreate', async (message) => {
     'abrirjanela', 'fecharjanela', 'setmarketchannel', 'setfachannel', 
     'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
     'setownercargos', 'addteam', 'addteams', 'removeteam', 
-    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes', 'tutorial'
+    'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
+    'addpalavra', 'removepalavra', 'listapalavras', 'tutorial'
   ];
 
   if (adminCommandsList.includes(command)) {
     
     if (!isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
+    }
+
+    // COMANDOS DO FILTRO DE PALAVRAS
+    if (command === 'addpalavra') {
+      const word = args.join(' ').toLowerCase().trim();
+      if (!word) return message.reply('❌ Digite a palavra ou frase que deseja bloquear. Ex: `%addpalavra discord.gg/`');
+      if (db.bannedWords.includes(word)) return message.reply('⚠️ Essa palavra já está na lista de bloqueio.');
+
+      db.bannedWords.push(word);
+      saveDatabase();
+      return message.reply(`✅ A palavra/termo **\`${word}\`** foi adicionada ao filtro automático!`);
+    }
+
+    if (command === 'removepalavra') {
+      const word = args.join(' ').toLowerCase().trim();
+      if (!word) return message.reply('❌ Digite a palavra que deseja remover do filtro. Ex: `%removepalavra discord.gg/`');
+      if (!db.bannedWords.includes(word)) return message.reply('❌ Essa palavra não está na lista.');
+
+      db.bannedWords = db.bannedWords.filter(w => w !== word);
+      saveDatabase();
+      return message.reply(`🗑️ A palavra/termo **\`${word}\`** foi removida do filtro!`);
+    }
+
+    if (command === 'listapalavras') {
+      if (db.bannedWords.length === 0) return message.reply('📋 Nenhuma palavra bloqueada no momento.');
+      const lista = db.bannedWords.map((w, i) => `${i + 1}. \`${w}\``).join('\n');
+      const embed = new EmbedBuilder()
+        .setColor(0xFF4500)
+        .setTitle('🚫 Palavras Bloqueadas (Auto-Mod)')
+        .setDescription(lista);
+      return message.reply({ embeds: [embed] });
     }
 
     // COMANDO %limparnarracoes
@@ -439,7 +487,7 @@ client.on('messageCreate', async (message) => {
         .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
         .addFields(
           { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal` - Define o canal exclusivo de comandos.\n• `%setmarketchannel #canal` - Define o canal de transferências/mercado.\n• `%setfachannel #canal` - Define o canal de Free Agency.\n• `%setblacklistchannel #canal` - Define o canal de blacklists.\n• `%abrirjanela` / `%fecharjanela` - Abre ou fecha o mercado de transferências.\n• `%setrosterlimit <número>` - Define o limite de jogadores por elenco.' },
-          { name: '🛡️ Moderação, Punições e Blacklist', value: '• `%warn @usuario <motivo>` - Sistema progressivo (Warn 1: 1h mute | Warn 2: 1d mute + Cargo 2 | Warn 3: 1sem mute + Cargo 3).\n• `%black @usuario <motivo> <tempo> <robux> <pix>` - Regista blacklist, envia embed e bane o utilizador automaticamente.\n• `%unblack @usuario C <motivo>` - Regista apelação, desbane o utilizador caso aprovado.' },
+          { name: '🛡️ Moderação, Punições e Filtro', value: '• `%warn @usuario <motivo>` - Sistema progressivo (Warn 1: 1h mute | Warn 2: 1d mute + Cargo 2 | Warn 3: 1sem mute + Cargo 3).\n• `%black @usuario <motivo> <tempo> <robux> <pix>` - Regista blacklist, envia embed e bane o utilizador automaticamente.\n• `%unblack @usuario C <motivo>` - Regista apelação, desbane o utilizador caso aprovado.\n• `%addpalavra <termo>` / `%removepalavra <termo>` / `%listapalavras` - Gerencia palavras apagadas automaticamente.' },
           { name: '📅 Agendamento de Mensagens', value: '• `%agendar #canal <mensagem> <tempoInício> <intervalo>` - Agenda mensagens recorrentes (ex: `0` para agora e `30m` para repetir).\n• `%listagendados` - Lista todos os agendamentos ativos e IDs.\n• `%desagendar <#ID>` - Cancela e remove um agendamento.' },
           { name: '⚽ Gestão de Times e Elencos', value: '• `%teams` - Mostra a lista completa de todos os times e emojis registados.\n• `%roster @CargoDoTime` - Mostra os jogadores alocados num time.\n• `%addteam @Cargo :emoji:` / `%addteams` - Regista novos times na base de dados.' },
           { name: '🔄 Comandos de Mercado (Coaches/Jogadores)', value: '• `%sign @jogador` - Envia proposta no privado do jogador (com botões de aceitar/recusar).\n• `%release @jogador` - Dispensa o jogador do seu time.\n• `%demand` - Permite ao jogador sair voluntariamente do time atual.\n• `!freeagency <mensagem>` (ou `!fa`) - Publica anúncio de Free Agent no canal configurado.' },
