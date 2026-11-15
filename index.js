@@ -200,7 +200,7 @@ client.on('messageCreate', async (message) => {
 // 2. FILTRO AUTOMÁTICO DE PALAVRAS PROIBIDAS (Apaga silenciosamente, ignora Staff/Admins)
   if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
     const contentLower = message.content.toLowerCase();
-    const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word));
+    const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
     if (hasBannedWord) {
       await message.delete().catch(() => {});
       return;
