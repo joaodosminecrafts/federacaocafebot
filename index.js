@@ -130,8 +130,19 @@ const client = new Client({
   rest: { timeout: 60000, retries: 3 }
 });
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
+
+  // LIMPA TODOS OS COMANDOS DE BARRA (/) ANTIGOS DO DISCORD (GLOBAIS E DE SERVIDOR)
+  try {
+    await client.application.commands.set([]);
+    for (const [, guild] of client.guilds.cache) {
+      await guild.commands.set([]).catch(() => {});
+    }
+    console.log('[Discord] 🧹 Todos os comandos de barra (/) antigos foram removidos com sucesso!');
+  } catch (err) {
+    console.error('[ERRO LIMPEZA SLASH]:', err);
+  }
 });
 
 function getUserTeam(member) {
@@ -197,7 +208,7 @@ client.on('messageCreate', async (message) => {
 
   if (message.author.bot || !message.guild) return;
 
-// 2. FILTRO AUTOMÁTICO DE PALAVRAS PROIBIDAS (Apaga silenciosamente, ignora Staff/Admins)
+  // 2. FILTRO AUTOMÁTICO DE PALAVRAS PROIBIDAS (Apaga silenciosamente, ignora Staff/Admins)
   if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
     const contentLower = message.content.toLowerCase();
     const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
