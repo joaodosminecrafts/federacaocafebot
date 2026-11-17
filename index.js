@@ -76,6 +76,13 @@ const DEFAULT_TEAMS = [
   { roleId: '1566289297156603924', emoji: '<:LVP:1566281511622287440>' }
 ];
 
+const DEFAULT_BANNED_WORDS = [
+  "exu", "pcd", "mkk", "makako", "macaco", "🐵", "🐒", "🙊", "🙉", "🙈", "🦍", "🦧",
+  "porn", "nigger", "nigg", "nger", "lixo", "lx", "gozei", "estrupado", "estrpado",
+  "mkkeico", "macacão", "chupar", "pau", "pika", "buceta", "bceta", "foder", "bct",
+  "desgraca", "desgraça", "cu", "bbum", "bunda", "bumbum"
+];
+
 let db = {
   marketOpen: true,
   marketChannelId: '', 
@@ -84,7 +91,7 @@ let db = {
   commandsChannelId: '', 
   rosterLimit: 20,
   ownerRoleIds: [], 
-  bannedWords: [],
+  bannedWords: DEFAULT_BANNED_WORDS,
   teams: DEFAULT_TEAMS
 };
 
@@ -100,13 +107,16 @@ function loadDatabase() {
       const parsed = JSON.parse(data);
       db = { ...db, ...parsed };
       if (!db.teams || db.teams.length === 0) db.teams = DEFAULT_TEAMS;
-      if (!Array.isArray(db.bannedWords)) db.bannedWords = [];
+      if (!Array.isArray(db.bannedWords) || db.bannedWords.length === 0) {
+        db.bannedWords = DEFAULT_BANNED_WORDS;
+      }
     } catch (e) {
       db.teams = DEFAULT_TEAMS;
-      db.bannedWords = [];
+      db.bannedWords = DEFAULT_BANNED_WORDS;
       saveDatabase();
     }
   } else {
+    db.bannedWords = DEFAULT_BANNED_WORDS;
     saveDatabase();
   }
 }
@@ -133,7 +143,6 @@ const client = new Client({
 client.once('ready', async () => {
   console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
 
-  // LIMPA TODOS OS COMANDOS DE BARRA (/) ANTIGOS DO DISCORD (GLOBAIS E DE SERVIDOR)
   try {
     await client.application.commands.set([]);
     for (const [, guild] of client.guilds.cache) {
