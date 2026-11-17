@@ -24,6 +24,9 @@ app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`))
 
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
+// ID do cargo "Cup-Tied" configurado:
+const CUP_TIED_ROLE_ID = '1572396208482426910';
+
 const DEFAULT_TEAMS = [
   // First Division
   { roleId: '1564789698206105710', emoji: '<:LDU:1564774805000028200>' },
@@ -92,7 +95,7 @@ let db = {
   rosterLimit: 20,
   ownerRoleIds: [], 
   bannedWords: DEFAULT_BANNED_WORDS,
-  eliminatedChampionsRoles: [], // Guarda os IDs dos cargos dos times da Champions eliminados
+  eliminatedChampionsRoles: [],
   teams: DEFAULT_TEAMS
 };
 
@@ -162,7 +165,6 @@ function getUserTeam(member) {
   return db.teams.find(t => member.roles.cache.has(t.roleId));
 }
 
-// Identifica se um time pertence à Champions League (últimos 16 da lista)
 function isChampionsTeam(roleId) {
   const championsList = db.teams.slice(-16);
   return championsList.some(t => t.roleId === roleId);
@@ -463,11 +465,23 @@ client.on('messageCreate', async (message) => {
       const role = message.mentions.roles.first();
       if (!role) return message.reply('❌ Mencione o cargo do time da Champions. Ex: `%eliminado @Manchester United`');
       if (!isChampionsTeam(role.id)) return message.reply('⚠️ Este time não pertence à Champions League (ou o cargo está incorreto).');
-      if (db.eliminatedChampionsRoles.includes(role.id)) return message.reply('⚠️ Este time já consta como eliminado.');
+      
+      if (!db.eliminatedChampionsRoles.includes(role.id)) {
+        db.eliminatedChampionsRoles.push(role.id);
+        saveDatabase();
+      }
 
-      db.eliminatedChampionsRoles.push(role.id);
-      saveDatabase();
-      return message.reply(`✅ O time ${role} foi marcado como **ELIMINADO** da Champions League! Os jogadores ficam Cup-Tied para outros times ativos.`);
+      // Entrega o cargo Cup-Tied para todos os jogadores atuais daquele time
+      await guild.members.fetch();
+      let aplicados = 0;
+      for (const [, teamMember] of role.members) {
+        if (!teamMember.roles.cache.has(CUP_TIED_ROLE_ID)) {
+          await teamMember.roles.add(CUP_TIED_ROLE_ID).catch(() => {});
+          aplicados++;
+        }
+      }
+
+      return message.reply(`✅ O time ${role} foi marcado como **ELIMINADO** e o cargo <@&${CUP_TIED_ROLE_ID}> foi aplicado em **${aplicados}** jogador(es)!`);
     }
 
     if (command === 'deseliminar') {
@@ -477,7 +491,16 @@ client.on('messageCreate', async (message) => {
 
       db.eliminatedChampionsRoles = db.eliminatedChampionsRoles.filter(rId => rId !== role.id);
       saveDatabase();
-      return message.reply(`✅ O time ${role} foi removido da lista de eliminados e voltou a estar ativo.`);
+
+      // Remove o cargo Cup-Tied de quem ainda está no time
+      await guild.members.fetch();
+      for (const [, teamMember] of role.members) {
+        if (teamMember.roles.cache.has(CUP_TIED_ROLE_ID)) {
+          await teamMember.roles.remove(CUP_TIED_ROLE_ID).catch(() => {});
+        }
+      }
+
+      return message.reply(`✅ O time ${role} foi removido da lista de eliminados e o cargo Cup-Tied dos seus jogadores atuais foi removido.`);
     }
 
     // COMANDOS DO FILTRO DE PALAVRAS
@@ -533,17 +556,17 @@ client.on('messageCreate', async (message) => {
     if (command === 'tutorial') {
       const embedTutorial = new EmbedBuilder()
         .setColor(0x00AE86)
-        .setTitle('📚 Tutorial Completo - Federação Café Bot')
+        .setTitle('📚 Tutorial Completo - Federation Café Bot')
         .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
         .addFields(
           { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal` - Define o canal exclusivo de comandos.\n• `%setmarketchannel #canal` - Define o canal de transferências/mercado.\n• `%setfachannel #canal` - Define o canal de Free Agency.\n• `%setblacklistchannel #canal` - Define o canal de blacklists.\n• `%abrirjanela` / `%fecharjanela` - Abre ou fecha o mercado de transferências.\n• `%setrosterlimit <número>` - Define o limite de jogadores por elenco.' },
-          { name: '🛡️ Moderação, Punições, Filtro e Cup-Tied', value: '• `%warn @usuario <motivo>` - Sistema progressivo de warns e mutes.\n• `%black @usuario <motivo> <tempo> <robux> <pix>` - Regista blacklist e bane o utilizador.\n• `%unblack @usuario C <motivo>` - Regista apelação e desbane.\n• `%addpalavra` / `%removepalavra` / `%listapalavras` - Gerencia o filtro automático.\n• `%eliminado @Time` / `%deseliminar @Time` - Controla o sistema Cup-Tied (bloqueia transferências de jogadores de times eliminados da Champions para times ainda ativos).' },
+          { name: '🛡️ Moderação, Punições, Filtro e Cup-Tied', value: '• `%warn @usuario <motivo>` - Sistema progressivo de warns e mutes.\n• `%black @usuario <motivo> <tempo> <robux> <pix>` - Regista blacklist e bane o utilizador.\n• `%unblack @usuario C <motivo>` - Regista apelação e desbane.\n• `%addpalavra` / `%removepalavra` / `%listapalavras` - Gerencia o filtro automático.\n• `%eliminado @Time` / `%deseliminar @Time` - Aplica/remove automaticamente o cargo Cup-Tied aos jogadores de times eliminados da Champions.' },
           { name: '📅 Agendamento de Mensagens', value: '• `%agendar #canal <mensagem> <tempoInício> <intervalo>` - Agenda mensagens recorrentes.\n• `%listagendados` - Lista todos os agendamentos ativos.\n• `%desagendar <#ID>` - Cancela um agendamento.' },
           { name: '⚽ Gestão de Times e Elencos', value: '• `%teams` - Mostra a lista completa de todos os times.\n• `%roster @CargoDoTime` - Mostra os jogadores alocados num time.\n• `%addteam` / `%addteams` / `%removeteam` - Gerencia os times.' },
-          { name: '🔄 Comandos de Mercado (Coaches/Jogadores)', value: '• `%sign @jogador` - Envia proposta no privado do jogador (com verificação automática de Cup-Tied para a Champions).\n• `%release @jogador` - Dispensa o jogador.\n• `%demand` - Permite ao jogador sair do time.\n• `!freeagency` - Publica anúncio de Free Agent.' },
+          { name: '🔄 Comandos de Mercado (Coaches/Jogadores)', value: '• `%sign @jogador` - Envia proposta no privado do jogador (bloqueia automaticamente jogadores com o cargo Cup-Tied para times da Champions).\n• `%release @jogador` - Dispensa o jogador.\n• `%demand` - Permite ao jogador sair do time.\n• `!freeagency` - Publica anúncio de Free Agent.' },
           { name: '🎙️ Transmissões e Outros', value: '• `%narrar` - Reserva transmissão.\n• `%listanarracoes` / `%limparnarracoes` - Gerencia narrações.\n• `%entrosar` - Comando divertido (3h cooldown).' }
         )
-        .setFooter({ text: 'Federação Café - Todos os direitos reservados.' });
+        .setFooter({ text: 'Federation Café - Todos os direitos reservados.' });
 
       return message.reply({ embeds: [embedTutorial] });
     }
@@ -896,13 +919,9 @@ client.on('messageCreate', async (message) => {
     if (!targetMember || targetUser.bot) return message.reply('❌ Jogador inválido.');
     if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador já pertence a uma equipe!`);
 
-    // VALIDAÇÃO DE CUP-TIED (Se o time do coach é da Champions League)
-    if (isChampionsTeam(coachTeam.roleId)) {
-      // Verifica se o jogador possui algum cargo de um time da Champions que já foi eliminado
-      const hasEliminatedChampionsRole = targetMember.roles.cache.some(r => db.eliminatedChampionsRoles.includes(r.id));
-      if (hasEliminatedChampionsRole) {
-        return message.reply(`⛔ **Transferência Bloqueada (Cup-Tied)!** Este jogador atuou por um clube da Champions League que já foi eliminado e não pode ser contratado por uma equipe ainda ativa na competição.`);
-      }
+    // VALIDAÇÃO DE CUP-TIED (Se o time do coach é da Champions League e o jogador tem o cargo Cup-Tied)
+    if (isChampionsTeam(coachTeam.roleId) && targetMember.roles.cache.has(CUP_TIED_ROLE_ID)) {
+      return message.reply(`⛔ **Transferência Bloqueada (Cup-Tied)!** Este jogador possui o cargo <@&${CUP_TIED_ROLE_ID}> e não pode ser contratado por uma equipe da Champions League.`);
     }
 
     const teamRole = guild.roles.cache.get(coachTeam.roleId);
@@ -953,6 +972,11 @@ client.on('messageCreate', async (message) => {
     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember || !targetMember.roles.cache.has(team.roleId)) return message.reply('❌ O jogador não é do seu time.');
 
+    // Se o time já estiver marcado como eliminado, garante que o jogador receba o cargo Cup-Tied ao sair
+    if (db.eliminatedChampionsRoles.includes(team.roleId) && !targetMember.roles.cache.has(CUP_TIED_ROLE_ID)) {
+      await targetMember.roles.add(CUP_TIED_ROLE_ID).catch(() => {});
+    }
+
     const teamRole = guild.roles.cache.get(team.roleId);
     if (teamRole) await targetMember.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
@@ -964,6 +988,12 @@ client.on('messageCreate', async (message) => {
   if (command === 'demand') {
     const team = getUserTeam(member);
     if (!team) return message.reply('❌ Você não tem time.');
+
+    // Se o time já estiver marcado como eliminado, garante que o jogador receba o cargo Cup-Tied ao sair
+    if (db.eliminatedChampionsRoles.includes(team.roleId) && !member.roles.cache.has(CUP_TIED_ROLE_ID)) {
+      await member.roles.add(CUP_TIED_ROLE_ID).catch(() => {});
+    }
+
     const teamRole = guild.roles.cache.get(team.roleId);
     if (teamRole) await member.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
@@ -973,12 +1003,8 @@ client.on('messageCreate', async (message) => {
   }
 
   if (command === 'roster') {
-    const role = message.mentions.channels ? message.mentions.roles.first() : null; // fallback seguro
-    if (!role) {
-      const r = message.mentions.roles.first();
-      if (!r) return message.reply('❌ Mencione o cargo do time.');
-    }
     const targetRole = message.mentions.roles.first();
+    if (!targetRole) return message.reply('❌ Mencione o cargo do time.');
     await guild.members.fetch();
     const members = targetRole.members.map(m => `• <@${m.id}>`).join('\n') || '*Nenhum jogador.*';
     const embed = new EmbedBuilder().setColor(0x00FF00).setTitle(`📋 Elenco - ${targetRole.name}`).setDescription(members);
