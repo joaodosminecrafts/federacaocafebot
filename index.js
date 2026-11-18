@@ -291,122 +291,10 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
-  const isCmdPercent = message.content.startsWith('%');
-  const isCmdExclamation = message.content.startsWith('!');
-
-  if (!isCmdPercent && !isCmdExclamation) return;
-
-  const argsCheck = message.content.slice(1).trim().split(/ +/);
-  const cmdCheck = argsCheck.shift().toLowerCase();
-  const member = message.member;
-
-  // COMANDO %narrar
-  if (cmdCheck === 'narrar') {
-    const targetNarrarChannel = '1553887041689751664';
-    const allowedNarrarRole = '1527044059976175738';
-
-    if (message.channel.id !== targetNarrarChannel) {
-      const tempMsg = await message.reply(`⚠️ O comando \`%narrar\` só pode ser usado no canal <#${targetNarrarChannel}>!`);
-      setTimeout(() => {
-        message.delete().catch(() => {});
-        tempMsg.delete().catch(() => {});
-      }, 5000);
-      return;
-    }
-
-    if (!member.roles.cache.has(allowedNarrarRole) && !member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('❌ Apenas quem possui o cargo de Narrador pode usar este comando.');
-    }
-
-    if (argsCheck.length < 3) {
-      return message.reply('❌ Formato incorreto! Uso: `%narrar :emoji1: :emoji2: NomeDaTransmissora`');
-    }
-
-    const emoji1 = argsCheck[0];
-    const emoji2 = argsCheck[1];
-    const transmissora = argsCheck.slice(2).join(' ');
-
-    const matchKey = [emoji1, emoji2].sort().join('_VS_');
-
-    if (narratedGames.some(g => g.matchKey === matchKey)) {
-      return message.reply('⚠️ Esse jogo já vai ser narrado!');
-    }
-
-    const narrationId = Math.floor(1000 + Math.random() * 9000);
-
-    narratedGames.push({
-      id: narrationId,
-      matchKey,
-      emoji1,
-      emoji2,
-      transmissora,
-      narratorId: member.id
-    });
-
-    const formattedMsg = 
-      `## ☕ | BroadCaster 🎥\n` +
-      `**Game: ( ${emoji1} ⚔️ ${emoji2} )**\n\n\n` +
-      `**BroadCaster:** __${transmissora}__`;
-
-    return message.channel.send(formattedMsg);
-  }
-
-  // COMANDO %listanarracoes
-  if (cmdCheck === 'listanarracoes') {
-    if (narratedGames.length === 0) {
-      return message.reply('📋 Não há jogos registados para narração no momento.');
-    }
-
-    const lista = narratedGames.map(g => 
-      `• **ID #${g.id}** -> ${g.emoji1} ⚔️ ${g.emoji2} | **${g.transmissora}** (<@${g.narratorId}>)`
-    ).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setColor(0x0099FF)
-      .setTitle('🎙️ Jogos Agendados para Narração')
-      .setDescription(lista);
-
-    return message.reply({ embeds: [embed] });
-  }
-
-  // COMANDO %entrosar
-  if (cmdCheck === 'entrosar') {
-    const targetEntrosarChannel = '1526123188101320837';
-    if (message.channel.id !== targetEntrosarChannel) {
-      const tempMsg = await message.reply(`⚠️ O comando \`%entrosar\` só pode ser usado no canal <#${targetEntrosarChannel}>!`);
-      setTimeout(() => {
-        message.delete().catch(() => {});
-        tempMsg.delete().catch(() => {});
-      }, 5000);
-      return;
-    }
-
-    const now = Date.now();
-    const cooldownTime = 3 * 60 * 60 * 1000;
-    if (entrosarCooldowns.has(member.id)) {
-      const expirationTime = entrosarCooldowns.get(member.id) + cooldownTime;
-      if (now < expirationTime) {
-        const timeLeft = Math.ceil((expirationTime - now) / (60 * 1000));
-        const hoursLeft = (timeLeft / 60).toFixed(1);
-        return message.reply(`⏳ Calma aí! Você precisa esperar mais aprox. **${hoursLeft} horas** para usar o \`%entrosar\` novamente.`);
-      }
-    }
-
-    entrosarCooldowns.set(member.id, now);
-
-    const chance = Math.random();
-    if (chance < 0.5) {
-      return message.reply('✅ Permissão para entrosar liberada!');
-    } else {
-      return message.reply('⛔ Permissão para entrosar negada!');
-    }
-  }
-
-  const isAdminOrStaffCmd = [
+const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 
-    'setassistent', 'removeassistent', 'tutorial'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial'
   ].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
@@ -453,8 +341,7 @@ client.on('messageCreate', async (message) => {
     'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
     'setownercargos', 'addteam', 'addteams', 'removeteam', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 
-    'setassistent', 'removeassistent', 'tutorial'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial'
   ];
 
   if (adminCommandsList.includes(command)) {
@@ -903,7 +790,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // COMANDOS DE ASSISTENTE PARA CLUB OWNERS
+  // COMANDOS DE ASSISTENTE PARA CLUB OWNERS (FORA DO BLOCO DE STAFF)
   if (command === 'setassistent') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem usar este comando.');
     
