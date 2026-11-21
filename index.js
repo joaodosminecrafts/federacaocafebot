@@ -987,9 +987,10 @@ client.on('messageCreate', async (message) => {
 
     const avatarUrl = 'https://cdn.discordapp.com/icons/1463007976670498900/a_2fc2b2afa81fdc27762088d5dab31498.gif?size=256';
     const bannerUrl = 'https://i.ibb.co/0pRJcfsP/Superliga-Caf-MPS-94.png';
-
-    // Tenta extrair a imagem/ícone do cargo do time para usar na thumbnail (se houver)
     let teamThumbnail = teamRole && teamRole.iconURL ? teamRole.iconURL() : avatarUrl;
+
+    // Cria um ID Único para este contrato específico
+    const proposalId = Date.now().toString();
 
     const embedContract = new EmbedBuilder()
       .setColor(0x442604)
@@ -1009,12 +1010,12 @@ client.on('messageCreate', async (message) => {
       )
       .setImage(bannerUrl)
       .setThumbnail(teamThumbnail)
-      .setFooter({ text: 'Prezando Por Uma Comunidade Melhor.', iconURL: avatarUrl })
+      .setFooter({ text: `Prezando Por Uma Comunidade Melhor. | ID: ${proposalId}`, iconURL: avatarUrl })
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('decline_offer').setLabel('Recusar').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`accept_${proposalId}`).setLabel('Aceitar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`decline_${proposalId}`).setLabel('Recusar').setStyle(ButtonStyle.Danger)
     );
 
     try {
@@ -1024,15 +1025,21 @@ client.on('messageCreate', async (message) => {
       });
       await message.reply(`📩 Proposta de contrato enviada no privado do jogador!`);
 
+      // Coletor que valida se o ID do botão corresponde ao contrato atual
       const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
       collector.on('collect', async i => {
         if (i.user.id !== targetUser.id) {
           return i.reply({ content: '❌ Apenas o jogador convidado pode interagir com este contrato.', ephemeral: true });
         }
 
+        // Se o ID do botão clicado não for o ID da proposta atual, significa que é um contrato antigo/substituído!
+        if (!i.customId.endsWith(proposalId)) {
+          return i.reply({ content: '⚠️ **Este contrato expirou!** O clube enviou uma proposta mais recente para você.', ephemeral: true });
+        }
+
         await i.deferUpdate().catch(() => {});
 
-        if (i.customId === 'decline_offer') {
+        if (i.customId === `decline_${proposalId}`) {
           const embedDeclined = new EmbedBuilder()
             .setColor(0x442604)
             .setAuthor({ name: 'Federação Café', iconURL: avatarUrl })
@@ -1045,11 +1052,12 @@ client.on('messageCreate', async (message) => {
             .setFooter({ text: 'Prezando Por Uma Comunidade Melhor.', iconURL: avatarUrl })
             .setTimestamp();
 
+          collector.stop();
           await dmMsg.edit({ embeds: [embedDeclined], components: [] }).catch(() => {});
           return;
         }
 
-        if (i.customId === 'accept_offer') {
+        if (i.customId === `accept_${proposalId}`) {
           if (!db.marketOpen || (teamRole && teamRole.members.size >= db.rosterLimit)) {
             return i.followUp({ content: '❌ A janela fechou ou o elenco está cheio!', ephemeral: true });
           }
@@ -1075,6 +1083,7 @@ client.on('messageCreate', async (message) => {
             .setFooter({ text: 'Prezando Por Uma Comunidade Melhor.', iconURL: avatarUrl })
             .setTimestamp();
 
+          collector.stop();
           await dmMsg.edit({ embeds: [embedAccepted], components: [] }).catch(() => {});
         }
       });
@@ -1126,7 +1135,7 @@ client.on('messageCreate', async (message) => {
     await guild.members.fetch();
     const members = targetRole.members.map(m => `• <@${m.id}>`).join('\n') || '*Nenhum jogador.*';
     const embed = new EmbedBuilder().setColor(0x442604).setTitle(`📋 Elenco - ${targetRole.name}`).setDescription(members);
-    return message.reply({ embeds: [embed] });
+    return message.reply({ embeds: [embed]>>
   }
 
   if (command === 'teams' || command === 'times') {
