@@ -21,59 +21,6 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 
-// Rota de Callback do OAuth2 para o comando %verificar
-const VERIFIED_ROLE_ID = '1526089498570522666';
-
-app.get('/callback', async (req, res) => {
-  const { code, state } = req.query; // state guarda o guildId
-  if (!code || !state) {
-    return res.status(400).send('<h1>❌ Erro na verificação: Parâmetros ausentes.</h1>');
-  }
-
-  try {
-    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: process.env.REDIRECT_URI
-      })
-    });
-
-    const tokenData = await tokenResponse.json();
-    if (!tokenData.access_token) {
-      return res.status(400).send('<h1>❌ Falha ao autenticar com o Discord. Tente novamente.</h1>');
-    }
-
-    const userResponse = await fetch('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
-    });
-    const userData = await userResponse.json();
-
-    const guild = client.guilds.cache.get(state);
-    if (!guild) return res.status(404).send('<h1>❌ Servidor não encontrado.</h1>');
-
-    const member = await guild.members.fetch(userData.id).catch(() => null);
-    if (!member) return res.status(404).send('<h1>❌ Você não está no servidor do Discord!</h1>');
-
-    await member.roles.add(VERIFIED_ROLE_ID);
-
-    return res.send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 50px; background: #2b2d31; color: white; padding: 40px; border-radius: 10px; max-width: 400px; margin-inline: auto;">
-        <h1 style="color: #23a559;">✅ Verificado com Sucesso!</h1>
-        <p>Olá <b>${userData.username}</b>, seu cargo foi entregue e todos os canais foram liberados!</p>
-        <p style="font-size: 12px; color: #b5bac1;">Você já pode fechar esta aba e voltar ao Discord.</p>
-      </div>
-    `);
-  } catch (err) {
-    console.error('[ERRO AUTH VERIFICAR]:', err);
-    return res.status(500).send('<h1>❌ Erro interno ao concluir verificação.</h1>');
-  }
-});
-
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
 const DB_PATH = path.join(__dirname, 'league_config.json');
@@ -81,6 +28,7 @@ const DB_PATH = path.join(__dirname, 'league_config.json');
 // IDs dos cargos configurados:
 const CUP_TIED_ROLE_ID = '1572396208482426910';
 const ASSISTANT_ROLE_ID = '1565186858382528593';
+const VERIFIED_ROLE_ID = '1526089498570522666';
 
 const DEFAULT_TEAMS = [
   // First Division
@@ -216,14 +164,33 @@ client.once('ready', async () => {
   }
 });
 
+// Evento de clique para o botão verde de verificação direta
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
-  if (interaction.customId === 'btn_verificar_auth') {
-    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.REDIRECT_URI)}&response_type=code&scope=identify&state=${interaction.guild.id}`;
-    return interaction.reply({
-      content: `🔐 **Verificação de Segurança:**\n👉 **[Clique aqui para autorizar sua conta e liberar os canais](${authUrl})**`,
-      ephemeral: true
-    });
+
+  if (interaction.customId === 'btn_verificar_direto') {
+    const member = interaction.member;
+
+    if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
+      return interaction.reply({
+        content: '⚠️ Você já está verificado!',
+        ephemeral: true
+      });
+    }
+
+    try {
+      await member.roles.add(VERIFIED_ROLE_ID);
+      return interaction.reply({
+        content: '✅ **Verificado com sucesso!** O seu acesso aos canais foi liberado.',
+        ephemeral: true
+      });
+    } catch (err) {
+      console.error('[ERRO AO DAR CARGO]:', err);
+      return interaction.reply({
+        content: '❌ Ocorreu um erro ao entregar o seu cargo. Avise a administração.',
+        ephemeral: true
+      });
+    }
   }
 });
 
@@ -522,10 +489,6 @@ client.on('messageCreate', async (message) => {
     }
 
     if (command === 'verificar') {
-      if (!process.env.CLIENT_ID || !process.env.REDIRECT_URI) {
-        return message.reply('⚠️ Configure as variáveis `CLIENT_ID`, `CLIENT_SECRET` e `REDIRECT_URI` no Railway antes de usar este comando.');
-      }
-
       const embedVerify = new EmbedBuilder()
         .setColor(0xF1C40F)
         .setTitle('Se Verificar 🔒')
@@ -535,7 +498,7 @@ client.on('messageCreate', async (message) => {
 
       const rowVerify = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId('btn_verificar_auth')
+          .setCustomId('btn_verificar_direto')
           .setLabel('Verificar')
           .setStyle(ButtonStyle.Success)
       );
