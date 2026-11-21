@@ -21,96 +21,6 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
 
-// Rota de Callback do OAuth2 (Página bonita e profissional no Railway)
-const VERIFIED_ROLE_ID = '1526089498570522666';
-
-app.get('/callback', async (req, res) => {
-  const { code, state } = req.query; // state guarda o guildId
-  if (!code || !state) {
-    return res.status(400).send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 80px; background: #1e1f22; color: #f2f3f5; padding: 40px; border-radius: 12px; max-width: 450px; margin-inline: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-        <h1 style="color: #ed4245; margin-bottom: 10px;">❌ Erro na Verificação</h1>
-        <p style="color: #dbdee1;">Parâmetros ausentes ou sessão expirada.</p>
-      </div>
-    `);
-  }
-
-  try {
-    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: process.env.REDIRECT_URI
-      })
-    });
-
-    const tokenData = await tokenResponse.json();
-    if (!tokenData.access_token) {
-      return res.status(400).send(`
-        <div style="font-family: sans-serif; text-align: center; margin-top: 80px; background: #1e1f22; color: #f2f3f5; padding: 40px; border-radius: 12px; max-width: 450px; margin-inline: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-          <h1 style="color: #ed4245; margin-bottom: 10px;">❌ Falha na Autenticação</h1>
-          <p style="color: #dbdee1;">Não foi possível validar sua conta com o Discord. Tente novamente.</p>
-        </div>
-      `);
-    }
-
-    const userResponse = await fetch('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
-    });
-    const userData = await userResponse.json();
-
-    const guild = client.guilds.cache.get(state);
-    if (!guild) {
-      return res.status(404).send(`
-        <div style="font-family: sans-serif; text-align: center; margin-top: 80px; background: #1e1f22; color: #f2f3f5; padding: 40px; border-radius: 12px; max-width: 450px; margin-inline: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-          <h1 style="color: #ed4245; margin-bottom: 10px;">❌ Servidor Não Encontrado</h1>
-          <p style="color: #dbdee1;">O bot não conseguiu localizar o servidor da liga.</p>
-        </div>
-      `);
-    }
-
-    const member = await guild.members.fetch(userData.id).catch(() => null);
-    if (!member) {
-      return res.status(404).send(`
-        <div style="font-family: sans-serif; text-align: center; margin-top: 80px; background: #1e1f22; color: #f2f3f5; padding: 40px; border-radius: 12px; max-width: 450px; margin-inline: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-          <h1 style="color: #ed4245; margin-bottom: 10px;">❌ Membro Ausente</h1>
-          <p style="color: #dbdee1;">Você precisa estar no servidor do Discord da <b>Federação Café</b> para se verificar!</p>
-        </div>
-      `);
-    }
-
-    await member.roles.add(VERIFIED_ROLE_ID);
-
-    // Página HTML profissional e estilizada de sucesso
-    return res.send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 60px; background: #1e1f22; color: #f2f3f5; padding: 40px; border-radius: 12px; max-width: 450px; margin-inline: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.6); border: 1px solid #35363c;">
-        <h2 style="color: #f1c40f; margin-bottom: 5px;">☕ Federação Café</h2>
-        <hr style="border: 0; height: 1px; background: #35363c; margin: 20px 0;">
-        <h1 style="color: #23a559; margin-bottom: 15px;">✅ Verificado com Sucesso!</h1>
-        <p style="font-size: 16px; color: #dbdee1; line-height: 1.5;">
-          Olá <b>${userData.username}</b>, sua identidade foi confirmada e o seu cargo foi entregue com sucesso!
-        </p>
-        <p style="font-size: 13px; color: #949ba4; margin-top: 25px;">
-          Já pode fechar esta aba e retornar ao Discord para acessar todos os canais.
-        </p>
-        <a href="https://discord.com/channels/${state}" style="display: inline-block; margin-top: 15px; background-color: #5865f2; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 14px;">Voltar ao Discord</a>
-      </div>
-    `);
-  } catch (err) {
-    console.error('[ERRO AUTH VERIFICAR]:', err);
-    return res.status(500).send(`
-      <div style="font-family: sans-serif; text-align: center; margin-top: 80px; background: #1e1f22; color: #f2f3f5; padding: 40px; border-radius: 12px; max-width: 450px; margin-inline: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-        <h1 style="color: #ed4245; margin-bottom: 10px;">❌ Erro Interno</h1>
-        <p style="color: #dbdee1;">Ocorreu um erro ao concluir sua verificação. Tente novamente mais tarde.</p>
-      </div>
-    `);
-  }
-});
-
 app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
 
 const DB_PATH = path.join(__dirname, 'league_config.json');
@@ -118,6 +28,7 @@ const DB_PATH = path.join(__dirname, 'league_config.json');
 // IDs dos cargos configurados:
 const CUP_TIED_ROLE_ID = '1572396208482426910';
 const ASSISTANT_ROLE_ID = '1565186858382528593';
+const VERIFIED_ROLE_ID = '1526089498570522666';
 
 const DEFAULT_TEAMS = [
   // First Division
@@ -253,23 +164,33 @@ client.once('ready', async () => {
   }
 });
 
-// Evento de clique no botão de verificação por OAuth2 (pede acesso à conta)
+// Evento de clique para o botão verde de verificação direta
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
-  if (interaction.customId === 'btn_verificar_auth') {
-    if (!process.env.CLIENT_ID || !process.env.REDIRECT_URI) {
+
+  if (interaction.customId === 'btn_verificar_direto') {
+    const member = interaction.member;
+
+    if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
       return interaction.reply({
-        content: '⚠️ As credenciais de OAuth2 não estão configuradas no Railway.',
+        content: '⚠️ Você já está verificado!',
         ephemeral: true
       });
     }
 
-    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.REDIRECT_URI)}&response_type=code&scope=identify&state=${interaction.guild.id}`;
-    
-    return interaction.reply({
-      content: `🔐 **Verificação de Identidade (OAuth2):**\n👉 **[Clique aqui para autorizar sua conta e liberar os canais](${authUrl})**`,
-      ephemeral: true
-    });
+    try {
+      await member.roles.add(VERIFIED_ROLE_ID);
+      return interaction.reply({
+        content: '✅ **Verificado com sucesso!** O seu acesso aos canais foi liberado.',
+        ephemeral: true
+      });
+    } catch (err) {
+      console.error('[ERRO AO DAR CARGO]:', err);
+      return interaction.reply({
+        content: '❌ Ocorreu um erro ao entregar o seu cargo. Avise a administração.',
+        ephemeral: true
+      });
+    }
   }
 });
 
@@ -571,13 +492,13 @@ client.on('messageCreate', async (message) => {
       const embedVerify = new EmbedBuilder()
         .setColor(0xF1C40F)
         .setTitle('Se Verificar 🔒')
-        .setDescription('Clique no Botão verde "Verificar" para autorizar sua conta e ter acesso a **todos os canais!**')
-        .setFooter({ text: 'Federação Café - Verificação por OAuth2' })
+        .setDescription('Clique no Botão verde "Verificar" para ter acesso a **todos os canais!**')
+        .setFooter({ text: 'Verificação rápida e segura por Botão.' })
         .setTimestamp();
 
       const rowVerify = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId('btn_verificar_auth')
+          .setCustomId('btn_verificar_direto')
           .setLabel('Verificar')
           .setStyle(ButtonStyle.Success)
       );
