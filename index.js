@@ -291,6 +291,362 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
+  const { 
+  Client, 
+  GatewayIntentBits, 
+  PermissionsBitField, 
+  EmbedBuilder, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  ComponentType 
+} = require('discord.js');
+const { Agent, setGlobalDispatcher } = require('undici');
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+// Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout
+setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
+
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.get('/', (req, res) => res.send('Bot de Notificação e Liga Online!'));
+
+// Rota de Callback do OAuth2 para o comando %verificar
+const VERIFIED_ROLE_ID = '1526089498570522666';
+
+app.get('/callback', async (req, res) => {
+  const { code, state } = req.query; // state guarda o guildId
+  if (!code || !state) {
+    return res.status(400).send('<h1>❌ Erro na verificação: Parâmetros ausentes.</h1>');
+  }
+
+  try {
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.CLIENT_ID,
+        client_secret: process.env.CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: process.env.REDIRECT_URI
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) {
+      return res.status(400).send('<h1>❌ Falha ao autenticar com o Discord. Tente novamente.</h1>');
+    }
+
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const userData = await userResponse.json();
+
+    const guild = client.guilds.cache.get(state);
+    if (!guild) return res.status(404).send('<h1>❌ Servidor não encontrado.</h1>');
+
+    const member = await guild.members.fetch(userData.id).catch(() => null);
+    if (!member) return res.status(404).send('<h1>❌ Você não está no servidor do Discord!</h1>');
+
+    await member.roles.add(VERIFIED_ROLE_ID);
+
+    return res.send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 50px; background: #2b2d31; color: white; padding: 40px; border-radius: 10px; max-width: 400px; margin-inline: auto;">
+        <h1 style="color: #23a559;">✅ Verificado com Sucesso!</h1>
+        <p>Olá <b>${userData.username}</b>, seu cargo foi entregue e todos os canais foram liberados!</p>
+        <p style="font-size: 12px; color: #b5bac1;">Você já pode fechar esta aba e voltar ao Discord.</p>
+      </div>
+    `);
+  } catch (err) {
+    console.error('[ERRO AUTH VERIFICAR]:', err);
+    return res.status(500).send('<h1>❌ Erro interno ao concluir verificação.</h1>');
+  }
+});
+
+app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`));
+
+const DB_PATH = path.join(__dirname, 'league_config.json');
+
+// IDs dos cargos configurados:
+const CUP_TIED_ROLE_ID = '1572396208482426910';
+const ASSISTANT_ROLE_ID = '1565186858382528593';
+
+const DEFAULT_TEAMS = [
+  // First Division
+  { roleId: '1564789698206105710', emoji: '<:LDU:1564774805000028200>' },
+  { roleId: '1564785716544798840', emoji: '<:ATL:1564783248045899919>' },
+  { roleId: '1564786818908422296', emoji: '<:BOT:1564775109930123284>' },
+  { roleId: '1564786169970032780', emoji: '<:SAN:1564775453905129563>' },
+  { roleId: '1564785981121626263', emoji: '<:FLA:1564775631441629204>' },
+  { roleId: '1564785871188795452', emoji: '<:PAL:1564780090271731792>' },
+  { roleId: '1564787632259473418', emoji: '<:BOC:1564780041076867192>' },
+  { roleId: '1564787003944341554', emoji: '<:RIV:1564783161060098169>' },
+  { roleId: '1564789215139594461', emoji: '<:BAR:1564783200096624660>' },
+  { roleId: '1566819434943873034', emoji: '<:FLU:1560387904792961106>' },
+
+  // Second Division
+  { roleId: '1564786340976005302', emoji: '<:INT:1564774876743602318>' },
+  { roleId: '1564787980995133630', emoji: '<:COL:1564775004585992332>' },
+  { roleId: '1564786650893258902', emoji: '<:VAS:1564783286843088978>' },
+  { roleId: '1564786498123866366', emoji: '<:NAC:1564775403753701406>' },
+  { roleId: '1564786209216135289', emoji: '<:SAO:1564775509139918858>' },
+  { roleId: '1564785794961383606', emoji: '<:COR:1564775743399927898>' },
+  { roleId: '1564787552240541777', emoji: '<:PEN:1564784455980159037>' },
+  { roleId: '1564786436539154574', emoji: '<:GRE:1564775847385108490>' },
+
+  // Third Division
+  { roleId: '1564789481452863640', emoji: '<:ARG:1564779767796994109>' },
+  { roleId: '1564786079452766248', emoji: '<:SPOR:1564774740474990643>' },
+  { roleId: '1564788212193435768', emoji: '<:CER:1564779984424411486>' },
+  { roleId: '1564787179698528358', emoji: '<:UNV:1564779922872860893>' },
+  { roleId: '1564788393756467350', emoji: '<:ALL:1564779850143637564>' },
+  { roleId: '1564787319850934372', emoji: '<:EST:1564775346300264538>' },
+  { roleId: '1564787439585726565', emoji: '<:LAN:1564775555096645733>' },
+  { roleId: '1565211049618309191', emoji: '<:BOL:1565211446902526103>' },
+
+  // Champions League (Os 16 últimos)
+  { roleId: '1566286333637562419', emoji: '<:RMA:1566280843985420338>' },
+  { roleId: '1566286621425541270', emoji: '<:BAR:1566279808277553232>' },
+  { roleId: '1566286802527060058', emoji: '<:PSG:1566282052561674270>' },
+  { roleId: '1566286996287000586', emoji: '<:ARS:1566279585820180500>' },
+  { roleId: '1566287128982327306', emoji: '<:CITY:1566280933496324096>' },
+  { roleId: '1566287273157337148', emoji: '<:MAN:1566280260864049213>' },
+  { roleId: '1566287470046347344', emoji: '<:BAY:1566279844105297940>' },
+  { roleId: '1566287719124967474', emoji: '<:AMI:1566282529240125581>' },
+  { roleId: '1566287936993890354', emoji: '<:INT:1566280059214372865>' },
+  { roleId: '1566288125976649889', emoji: '<:POR:1566280308125339849>' },
+  { roleId: '1566288328813449246', emoji: '<:SPO:1566280895499993271>' },
+  { roleId: '1566288589505953842', emoji: '<:AST:1566279711888384040>' },
+  { roleId: '1566288786160361583', emoji: '<:BOR:1566279878058446939>' },
+  { roleId: '1566288909481017354', emoji: '<:GAL:1566281432261730335>' },
+  { roleId: '1566289147348656218', emoji: '<:LILL:1566281471889645698>' },
+  { roleId: '1566289297156603924', emoji: '<:LVP:1566281511622287440>' }
+];
+
+const DEFAULT_BANNED_WORDS = [
+  "exu", "pcd", "mkk", "makako", "macaco", "🐵", "🐒", "🙊", "🙉", "🙈", "🦍", "🦧",
+  "porn", "nigger", "nigg", "nger", "lixo", "lx", "gozei", "estrupado", "estrpado",
+  "mkkeico", "macacão", "chupar", "pau", "pika", "buceta", "bceta", "foder", "bct",
+  "desgraca", "desgraça", "cu", "bbum", "bunda", "bumbum"
+];
+
+let db = {
+  marketOpen: true,
+  marketChannelId: '', 
+  faChannelId: '', 
+  blacklistChannelId: '', 
+  commandsChannelId: '', 
+  rosterLimit: 20,
+  ownerRoleIds: [], 
+  bannedWords: DEFAULT_BANNED_WORDS,
+  eliminatedChampionsRoles: [],
+  teams: DEFAULT_TEAMS
+};
+
+const activeSchedules = [];
+const entrosarCooldowns = new Map(); 
+const narratedGames = []; 
+const pendingTickets = new Map(); 
+
+function loadDatabase() {
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      const data = fs.readFileSync(DB_PATH, 'utf-8');
+      const parsed = JSON.parse(data);
+      db = { ...db, ...parsed };
+      if (!db.teams || db.teams.length === 0) db.teams = DEFAULT_TEAMS;
+      if (!Array.isArray(db.bannedWords) || db.bannedWords.length === 0) {
+        db.bannedWords = DEFAULT_BANNED_WORDS;
+      }
+      if (!Array.isArray(db.eliminatedChampionsRoles)) db.eliminatedChampionsRoles = [];
+    } catch (e) {
+      db.teams = DEFAULT_TEAMS;
+      db.bannedWords = DEFAULT_BANNED_WORDS;
+      db.eliminatedChampionsRoles = [];
+      saveDatabase();
+    }
+  } else {
+    db.bannedWords = DEFAULT_BANNED_WORDS;
+    db.eliminatedChampionsRoles = [];
+    saveDatabase();
+  }
+}
+
+function saveDatabase() {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch (e) {}
+}
+
+loadDatabase();
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages
+  ],
+  rest: { timeout: 60000, retries: 3 }
+});
+
+client.once('ready', async () => {
+  console.log(`[Discord] ✅ Bot online como: ${client.user.tag}`);
+
+  try {
+    await client.application.commands.set([]);
+    for (const [, guild] of client.guilds.cache) {
+      await guild.commands.set([]).catch(() => {});
+    }
+    console.log('[Discord] 🧹 Todos os comandos de barra (/) antigos foram removidos com sucesso!');
+  } catch (err) {
+    console.error('[ERRO LIMPEZA SLASH]:', err);
+  }
+});
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+  if (interaction.customId === 'btn_verificar_auth') {
+    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.REDIRECT_URI)}&response_type=code&scope=identify&state=${interaction.guild.id}`;
+    return interaction.reply({
+      content: `🔐 **Verificação de Segurança:**\n👉 **[Clique aqui para autorizar sua conta e liberar os canais](${authUrl})**`,
+      ephemeral: true
+    });
+  }
+});
+
+function getUserTeam(member) {
+  return db.teams.find(t => member.roles.cache.has(t.roleId));
+}
+
+function isChampionsTeam(roleId) {
+  const championsList = db.teams.slice(-16);
+  return championsList.some(t => t.roleId === roleId);
+}
+
+function isCoach(member) {
+  if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+  return db.ownerRoleIds.some(rId => member.roles.cache.has(rId));
+}
+
+function isStaffOrOwner(member) {
+  if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+  
+  const adminAllowedRoles = [
+    '1558230381868752906', // Staff Em Teste
+    '1527141858239709234', // Staff
+    '1526639797920075936'  // Dono / Outro cargo pré-existente
+  ];
+
+  return adminAllowedRoles.some(roleId => member.roles.cache.has(roleId));
+}
+
+function parseIntervalToMs(intervalStr) {
+  const regex = /^(\d+)([mhd])$/i;
+  const match = intervalStr.match(regex);
+  if (match) {
+    const value = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    if (unit === 'm') return value * 60 * 1000;
+    if (unit === 'h') return value * 60 * 60 * 1000;
+    if (unit === 'd') return value * 24 * 60 * 60 * 1000;
+  }
+  const num = parseInt(intervalStr);
+  if (!isNaN(num)) return num * 60 * 1000;
+  return null;
+}
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot && message.channel.name && message.channel.name.toLowerCase().startsWith('ticket-')) {
+    if (message.embeds.length > 0) {
+      const embedDesc = (message.embeds[0].description || '').toLowerCase();
+      const userIdMatch = (message.embeds[0].description || '').match(/<@!?(\d+)>/);
+      const openerId = userIdMatch ? userIdMatch[1] : null;
+
+      if (embedDesc.includes('criou um novo ticket') && openerId) {
+        let ticketType = null;
+        if (embedDesc.includes('parceria')) ticketType = 'parceria';
+        else if (embedDesc.includes('dúvida') || embedDesc.includes('duvida')) ticketType = 'duvida';
+        else if (embedDesc.includes('denúncia') || embedDesc.includes('denuncia')) ticketType = 'denuncia';
+        else if (embedDesc.includes('inscrever') || embedDesc.includes('inscrição')) ticketType = 'inscrever';
+        else if (embedDesc.includes('compra')) ticketType = 'compra';
+        else if (embedDesc.includes('transmissor') || embedDesc.includes('narrador')) ticketType = 'transmissor';
+
+        if (ticketType) {
+          pendingTickets.set(message.channel.id, { openerId, type: ticketType });
+        }
+      }
+    }
+    return;
+  }
+
+  if (message.author.bot || !message.guild) return;
+
+  if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
+    const contentLower = message.content.toLowerCase();
+    const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
+    if (hasBannedWord) {
+      await message.delete().catch(() => {});
+      return;
+    }
+  }
+
+  if (pendingTickets.has(message.channel.id)) {
+    const ticketData = pendingTickets.get(message.channel.id);
+    if (message.author.id === ticketData.openerId) {
+      pendingTickets.delete(message.channel.id);
+
+      const footerNote = `\n\n-# Essa resposta é automática e não é modificada por IA.`;
+      const userMention = `<@${ticketData.openerId}>`;
+
+      if (ticketData.type === 'parceria') {
+        await message.reply(
+          `${userMention} 👋 **Atenção antes de aguardar atendimento:**\n` +
+          `📌 Envie agora o **texto da sua parceria** junto com o **link do seu servidor do Discord** (mínimo de 100 membros).` +
+          footerNote
+        );
+      } else if (ticketData.type === 'duvida') {
+        await message.reply(
+          `${userMention} 🤔 **Para agilizar o seu atendimento:**\n` +
+          `📌 Escreva a sua **dúvida completa** logo abaixo. Não mande apenas "oi" ou "olá"!` +
+          footerNote
+        );
+      } else if (ticketData.type === 'denuncia') {
+        await message.reply(
+          `${userMention} 🚨 **Para validar a sua denúncia:**\n` +
+          `📌 Envie o **ID/menção do acusado** e as **provas (prints ou vídeos)** agora mesmo.` +
+          footerNote
+        );
+      } else if (ticketData.type === 'inscrever') {
+        await message.reply(
+          `${userMention} Vagas fechadas!, não é possivel ownar, apenas é possível **pagar 5 reais ou 200 robux para Ficar na Fila De Espera pra próxima season ou para o próximo time que tomar Disband!**` +
+          footerNote
+        );
+      } else if (ticketData.type === 'compra') {
+        await message.reply(
+          `${userMention} 🛒 **Atendimento de Compras:**\n` +
+          `📌 Informe **qual produto/pacote deseja adquirir** e a **forma de pagamento** (Robux ou Pix).` +
+          footerNote
+        );
+      } else if (ticketData.type === 'transmissor') {
+        await message.reply(
+          `${userMention}\n` +
+          `☕| Narrador\n` +
+          `- Sabe colocar placar na tela?\n` +
+          `- Qual sua Plataforma?\n` +
+          `- Como você transmite?\n` +
+          `- Tem uma equipe?` +
+          footerNote
+        );
+      }
+    }
+  }
+
   const isCmdPercent = message.content.startsWith('%');
   const isCmdExclamation = message.content.startsWith('!');
 
@@ -300,7 +656,6 @@ client.on('messageCreate', async (message) => {
   const cmdCheck = argsCheck.shift().toLowerCase();
   const member = message.member;
 
-  // COMANDO %narrar
   if (cmdCheck === 'narrar') {
     const targetNarrarChannel = '1553887041689751664';
     const allowedNarrarRole = '1527044059976175738';
@@ -351,7 +706,6 @@ client.on('messageCreate', async (message) => {
     return message.channel.send(formattedMsg);
   }
 
-  // COMANDO %listanarracoes
   if (cmdCheck === 'listanarracoes') {
     if (narratedGames.length === 0) {
       return message.reply('📋 Não há jogos registados para narração no momento.');
@@ -369,7 +723,6 @@ client.on('messageCreate', async (message) => {
     return message.reply({ embeds: [embed] });
   }
 
-  // COMANDO %entrosar
   if (cmdCheck === 'entrosar') {
     const targetEntrosarChannel = '1526123188101320837';
     if (message.channel.id !== targetEntrosarChannel) {
@@ -405,7 +758,7 @@ client.on('messageCreate', async (message) => {
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'verificar'
   ].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
@@ -452,7 +805,7 @@ client.on('messageCreate', async (message) => {
     'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
     'setownercargos', 'addteam', 'addteams', 'removeteam', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'verificar'
   ];
 
   if (adminCommandsList.includes(command)) {
@@ -461,7 +814,29 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
     }
 
-    // COMANDOS DE CUP-TIED (ELIMINADOS DA CHAMPIONS)
+    if (command === 'verificar') {
+      if (!process.env.CLIENT_ID || !process.env.REDIRECT_URI) {
+        return message.reply('⚠️ Configure as variáveis `CLIENT_ID`, `CLIENT_SECRET` e `REDIRECT_URI` no Railway antes de usar este comando.');
+      }
+
+      const embedVerify = new EmbedBuilder()
+        .setColor(0xF1C40F)
+        .setTitle('Se Verificar 🔒')
+        .setDescription('Clique no Botão verde "Verificar" para ter acesso a **todos os canais!**')
+        .setFooter({ text: 'Não é possivel pegarmos nenhuma informação sua.' })
+        .setTimestamp();
+
+      const rowVerify = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('btn_verificar_auth')
+          .setLabel('Verificar')
+          .setStyle(ButtonStyle.Success)
+      );
+
+      await message.delete().catch(() => {});
+      return message.channel.send({ embeds: [embedVerify], components: [rowVerify] });
+    }
+
     if (command === 'eliminado') {
       const role = message.mentions.roles.first();
       if (!role) return message.reply('❌ Mencione o cargo do time da Champions. Ex: `%eliminado @Manchester United`');
@@ -502,7 +877,6 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ O time ${role} foi removido da lista de eliminados e o cargo Cup-Tied dos seus jogadores atuais foi removido.`);
     }
 
-    // COMANDOS DO FILTRO DE PALAVRAS
     if (command === 'addpalavra') {
       const word = args.join(' ').toLowerCase().trim();
       if (!word) return message.reply('❌ Digite a palavra ou frase que deseja bloquear. Ex: `%addpalavra discord.gg/`');
@@ -533,7 +907,6 @@ client.on('messageCreate', async (message) => {
       return message.reply({ embeds: [embed] });
     }
 
-    // COMANDO %limparnarracoes
     if (command === 'limparnarracoes') {
       const idArg = args[0];
       if (!idArg) return message.reply('❌ Indique o ID da narração ou digite `tudo`. Ex: `%limparnarracoes #1234` ou `%limparnarracoes tudo`. Use `%listanarracoes` para ver os IDs.');
@@ -551,14 +924,13 @@ client.on('messageCreate', async (message) => {
       return message.reply(`🗑️ Narração **#${cleanId}** removida com sucesso!`);
     }
 
-    // COMANDO %tutorial
     if (command === 'tutorial') {
       const embedTutorial = new EmbedBuilder()
         .setColor(0x00AE86)
         .setTitle('📚 Tutorial Completo - Federation Café Bot')
         .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
         .addFields(
-          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`' },
+          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%verificar`' },
           { name: '🛡️ Moderação, Punições, Filtro e Cup-Tied', value: '• `%warn @usuario <motivo>`\n• `%black @usuario <motivo> <tempo> <robux> <pix>`\n• `%unblack @usuario C <motivo>`\n• `%addpalavra` / `%removepalavra` / `%listapalavras`\n• `%eliminado @Time` / `%deseliminar @Time`' },
           { name: '👔 Gestão de Assistentes (Club Owners)', value: '• `%setassistent @jogador` - Atribui cargo de assistente a um membro do mesmo time.\n• `%removeassistent @jogador` - Remove o cargo de assistente.' },
           { name: '📅 Agendamento e Times', value: '• `%agendar` / `%listagendados` / `%desagendar`\n• `%teams` / `%roster` / `%addteam` / `%addteams` / `%removeteam`' },
@@ -613,7 +985,6 @@ client.on('messageCreate', async (message) => {
       return message.reply(`✅ Canal de Blacklists definido para: ${channel}`);
     }
 
-    // COMANDO %black
     if (command === 'black') {
       let targetUser = message.mentions.users.first();
       if (!targetUser && args[0]) {
@@ -689,7 +1060,6 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // COMANDO %unblack
     if (command === 'unblack') {
       let targetUser = message.mentions.users.first();
       if (!targetUser && args[0]) {
@@ -734,7 +1104,6 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // COMANDO %warn
     if (command === 'warn') {
       const targetUser = message.mentions.users.first();
       if (!targetUser) return message.reply('❌ Mencione o usuário. Ex: `%warn @usuario Motivo`');
@@ -775,7 +1144,6 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // COMANDO %agendar
     if (command === 'agendar') {
       const targetChannel = message.mentions.channels.first();
       if (!targetChannel) return message.reply('❌ Mencione o canal. Ex: `%agendar #geral Olá mundo 0 30m`');
@@ -901,7 +1269,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // COMANDOS DE ASSISTENTE PARA CLUB OWNERS (FORA DO BLOCO DE STAFF)
   if (command === 'setassistent') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem usar este comando.');
     
@@ -952,7 +1319,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // VALIDAÇÃO DE MERCADO
   if (['sign', 'release', 'demand'].includes(command) && !db.marketOpen) {
     return message.reply('🔒 **Mercado Fechado!**');
   }
@@ -969,7 +1335,6 @@ client.on('messageCreate', async (message) => {
     if (!targetMember || targetUser.bot) return message.reply('❌ Jogador inválido.');
     if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador já pertence a uma equipe!`);
 
-    // VALIDAÇÃO DE CUP-TIED
     if (isChampionsTeam(coachTeam.roleId) && targetMember.roles.cache.has(CUP_TIED_ROLE_ID)) {
       return message.reply(`⛔ **Transferência Bloqueada (Cup-Tied)!** Este jogador possui o cargo <@&${CUP_TIED_ROLE_ID}> e não pode ser contratado por uma equipe da Champions League.`);
     }
@@ -977,7 +1342,6 @@ client.on('messageCreate', async (message) => {
     const teamRole = guild.roles.cache.get(coachTeam.roleId);
     if (teamRole && teamRole.members.size >= db.rosterLimit) return message.reply(`🔋 **Elenco Cheio!**`);
 
-    // Captura os argumentos extras enviados no comando
     const extraArgs = args.slice(1);
     const posicoes = extraArgs[0] || 'N/A';
     const statusCara = extraArgs[1] || 'N/A';
@@ -989,7 +1353,6 @@ client.on('messageCreate', async (message) => {
     const bannerUrl = 'https://i.ibb.co/0pRJcfsP/Superliga-Caf-MPS-94.png';
     let teamThumbnail = teamRole && teamRole.iconURL ? teamRole.iconURL() : avatarUrl;
 
-    // Cria um ID Único para este contrato específico
     const proposalId = Date.now().toString();
 
     const embedContract = new EmbedBuilder()
@@ -1025,14 +1388,12 @@ client.on('messageCreate', async (message) => {
       });
       await message.reply(`📩 Proposta de contrato enviada no privado do jogador!`);
 
-      // Coletor que valida se o ID do botão corresponde ao contrato atual
       const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
       collector.on('collect', async i => {
         if (i.user.id !== targetUser.id) {
           return i.reply({ content: '❌ Apenas o jogador convidado pode interagir com este contrato.', ephemeral: true });
         }
 
-        // Se o ID do botão clicado não for o ID da proposta atual, significa que é um contrato antigo/substituído!
         if (!i.customId.endsWith(proposalId)) {
           return i.reply({ content: '⚠️ **Este contrato expirou!** O clube enviou uma proposta mais recente para você.', ephemeral: true });
         }
