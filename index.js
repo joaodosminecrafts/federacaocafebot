@@ -291,7 +291,7 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
-  const isCmdPercent = message.content.startsWith('%');
+ const isCmdPercent = message.content.startsWith('%');
   const isCmdExclamation = message.content.startsWith('!');
 
   if (!isCmdPercent && !isCmdExclamation) return;
