@@ -963,7 +963,8 @@ client.on('messageCreate', async (message) => {
     if (!coachTeam) return message.reply('❌ Você não pertence a nenhum time.');
     
     const targetUser = message.mentions.users.first();
-    if (!targetUser) return message.reply('❌ Mencione o jogador.');
+    if (!targetUser) return message.reply('❌ Mencione o jogador. Ex: `%sign @jogador [posições] [status] [informações]`');
+    
     const targetMember = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!targetMember || targetUser.bot) return message.reply('❌ Jogador inválido.');
     if (getUserTeam(targetMember)) return message.reply(`⚠️ O jogador já pertence a uma equipe!`);
@@ -976,6 +977,41 @@ client.on('messageCreate', async (message) => {
     const teamRole = guild.roles.cache.get(coachTeam.roleId);
     if (teamRole && teamRole.members.size >= db.rosterLimit) return message.reply(`🔋 **Elenco Cheio!**`);
 
+    // Captura os argumentos extras enviados no comando
+    const extraArgs = args.slice(1);
+    const posicoes = extraArgs[0] || 'N/A';
+    const statusCara = extraArgs[1] || 'N/A';
+    const informacoesAdicionais = extraArgs.slice(2).join(' ') || 'Nenhuma informação adicional';
+
+    const teamName = teamRole ? teamRole.name : 'NomeDoTime';
+
+    const avatarUrl = 'https://cdn.discordapp.com/icons/1463007976670498900/a_2fc2b2afa81fdc27762088d5dab31498.gif?size=256';
+    const bannerUrl = 'https://i.ibb.co/0pRJcfsP/Superliga-Caf-MPS-94.png';
+
+    // Tenta extrair a imagem/ícone do cargo do time para usar na thumbnail (se houver)
+    let teamThumbnail = teamRole && teamRole.iconURL ? teamRole.iconURL() : avatarUrl;
+
+    const embedContract = new EmbedBuilder()
+      .setColor(0x442604)
+      .setAuthor({ name: 'Federação Café', iconURL: avatarUrl })
+      .setDescription(
+        `Proposta da Federação Café ☕<:cafe:1560387904792961106>\n\n` +
+        `📋 **Contrato:**\n` +
+        `ENVIADO POR: <@${member.id}>\n\n` +
+        `👥 **Time:**\n` +
+        `${teamName}\n\n` +
+        `⚽ **Posições:**\n` +
+        `${posicoes}\n\n` +
+        `🎯 **Status:**\n` +
+        `${statusCara}\n\n` +
+        `📄 **Informações Adicionais:**\n` +
+        `${informacoesAdicionais}`
+      )
+      .setImage(bannerUrl)
+      .setThumbnail(teamThumbnail)
+      .setFooter({ text: 'Prezando Por Uma Comunidade Melhor.', iconURL: avatarUrl })
+      .setTimestamp();
+
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('accept_offer').setLabel('Aceitar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('decline_offer').setLabel('Recusar').setStyle(ButtonStyle.Danger)
@@ -983,32 +1019,67 @@ client.on('messageCreate', async (message) => {
 
     try {
       const dmMsg = await targetUser.send({
-        content: `📝 Proposta oficial para o **${teamRole ? teamRole.name : 'Time'}** (${coachTeam.emoji}) enviada por **${member.user.username}**!`,
+        embeds: [embedContract],
         components: [row]
       });
-      await message.reply(`📩 Proposta enviada no privado!`);
+      await message.reply(`📩 Proposta de contrato enviada no privado do jogador!`);
 
       const collector = dmMsg.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
       collector.on('collect', async i => {
+        if (i.user.id !== targetUser.id) {
+          return i.reply({ content: '❌ Apenas o jogador convidado pode interagir com este contrato.', ephemeral: true });
+        }
+
         await i.deferUpdate().catch(() => {});
+
         if (i.customId === 'decline_offer') {
-          await dmMsg.edit({ content: `❌ Proposta recusada.`, components: [] }).catch(() => {});
+          const embedDeclined = new EmbedBuilder()
+            .setColor(0x442604)
+            .setAuthor({ name: 'Federação Café', iconURL: avatarUrl })
+            .setDescription(
+              `Contrato Recusado. ⛔\n\n` +
+              `**Você Recusou o Contrato.** ⛔\n` +
+              `Você recusou o contrato de **${teamName}**!`
+            )
+            .setThumbnail(teamThumbnail)
+            .setFooter({ text: 'Prezando Por Uma Comunidade Melhor.', iconURL: avatarUrl })
+            .setTimestamp();
+
+          await dmMsg.edit({ embeds: [embedDeclined], components: [] }).catch(() => {});
           return;
         }
+
         if (i.customId === 'accept_offer') {
-          if (!db.marketOpen || (teamRole && teamRole.members.size >= db.rosterLimit)) return;
+          if (!db.marketOpen || (teamRole && teamRole.members.size >= db.rosterLimit)) {
+            return i.followUp({ content: '❌ A janela fechou ou o elenco está cheio!', ephemeral: true });
+          }
+
           if (teamRole) await targetMember.roles.add(teamRole).catch(() => {});
+
           const marketChannel = guild.channels.cache.get(db.marketChannelId);
-          const embed = new EmbedBuilder()
-            .setColor(0xFF0000)
+          const embedLog = new EmbedBuilder()
+            .setColor(0x442604)
             .setTitle('Offer Accepted')
             .setDescription(`<@${targetUser.id}> entrou para ${coachTeam.emoji} <@&${coachTeam.roleId}>`);
-          if (marketChannel) await marketChannel.send({ embeds: [embed] }).catch(() => {});
-          await dmMsg.edit({ content: `🎉 Parabéns! Você agora é do **${teamRole ? teamRole.name : 'Time'}**!`, components: [] }).catch(() => {});
+          if (marketChannel) await marketChannel.send({ embeds: [embedLog] }).catch(() => {});
+
+          const embedAccepted = new EmbedBuilder()
+            .setColor(0x442604)
+            .setAuthor({ name: 'Federação Café', iconURL: avatarUrl })
+            .setDescription(
+              `Contrato Aceito. ✅\n\n` +
+              `**Você aceitou o Contrato!** ✅\n` +
+              `Parabéns!, você está no **${teamName}**!`
+            )
+            .setThumbnail(teamThumbnail)
+            .setFooter({ text: 'Prezando Por Uma Comunidade Melhor.', iconURL: avatarUrl })
+            .setTimestamp();
+
+          await dmMsg.edit({ embeds: [embedAccepted], components: [] }).catch(() => {});
         }
       });
     } catch (err) {
-      return message.reply(`❌ Não foi possível enviar DM para o jogador.`);
+      return message.reply(`❌ Não foi possível enviar DM para o jogador (verifique se ele permite mensagens diretas).`);
     }
   }
 
@@ -1028,7 +1099,7 @@ client.on('messageCreate', async (message) => {
     const teamRole = guild.roles.cache.get(team.roleId);
     if (teamRole) await targetMember.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
-    const embed = new EmbedBuilder().setColor(0x888888).setTitle('Player Released').setDescription(`<@${targetUser.id}> dispensado de ${team.emoji}`);
+    const embed = new EmbedBuilder().setColor(0x442604).setTitle('Player Released').setDescription(`<@${targetUser.id}> dispensado de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
     return message.reply(`✅ Jogador dispensado.`);
   }
@@ -1044,7 +1115,7 @@ client.on('messageCreate', async (message) => {
     const teamRole = guild.roles.cache.get(team.roleId);
     if (teamRole) await member.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
-    const embed = new EmbedBuilder().setColor(0xFFA500).setTitle('Contract Terminated').setDescription(`<@${member.id}> saiu de ${team.emoji}`);
+    const embed = new EmbedBuilder().setColor(0x442604).setTitle('Contract Terminated').setDescription(`<@${member.id}> saiu de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
     return message.reply(`✅ Você saiu do time.`);
   }
@@ -1054,14 +1125,14 @@ client.on('messageCreate', async (message) => {
     if (!targetRole) return message.reply('❌ Mencione o cargo do time.');
     await guild.members.fetch();
     const members = targetRole.members.map(m => `• <@${m.id}>`).join('\n') || '*Nenhum jogador.*';
-    const embed = new EmbedBuilder().setColor(0x00FF00).setTitle(`📋 Elenco - ${targetRole.name}`).setDescription(members);
+    const embed = new EmbedBuilder().setColor(0x442604).setTitle(`📋 Elenco - ${targetRole.name}`).setDescription(members);
     return message.reply({ embeds: [embed] });
   }
 
   if (command === 'teams' || command === 'times') {
     if (db.teams.length === 0) return message.reply('📋 Nenhum time.');
     const lista = db.teams.map((t, index) => `${index + 1}. ${t.emoji} <@&${t.roleId}>`).join('\n');
-    const embed = new EmbedBuilder().setColor(0x0099FF).setTitle('🏆 Times').setDescription(lista);
+    const embed = new EmbedBuilder().setColor(0x442604).setTitle('🏆 Times').setDescription(lista);
     return message.reply({ embeds: [embed] });
   }
 });
