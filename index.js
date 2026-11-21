@@ -291,7 +291,7 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
- const isCmdPercent = message.content.startsWith('%');
+  const isCmdPercent = message.content.startsWith('%');
   const isCmdExclamation = message.content.startsWith('!');
 
   if (!isCmdPercent && !isCmdExclamation) return;
@@ -1135,7 +1135,7 @@ client.on('messageCreate', async (message) => {
     await guild.members.fetch();
     const members = targetRole.members.map(m => `• <@${m.id}>`).join('\n') || '*Nenhum jogador.*';
     const embed = new EmbedBuilder().setColor(0x442604).setTitle(`📋 Elenco - ${targetRole.name}`).setDescription(members);
-    return message.reply({ embeds: [embed]>>
+    return message.reply({ embeds: [embed] });
   }
 
   if (command === 'teams' || command === 'times') {
