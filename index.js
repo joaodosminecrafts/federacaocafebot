@@ -14,7 +14,6 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
-// Ajusta o dispatcher global HTTP para evitar bloqueios de socket/timeout
 setGlobalDispatcher(new Agent({ connect: { timeout: 60000 } }));
 
 const app = express();
@@ -26,17 +25,14 @@ app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`))
 
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
-// IDs dos cargos e links visuais personalizados
 const CUP_TIED_ROLE_ID = '1572396208482426910';
 const ASSISTANT_ROLE_ID = '1565186858382528593';
 const VERIFIED_ROLE_ID = '1526089498570522666';
 
-// Cargos de Staff / Moderação com acesso aos tickets
 const STAFF_TEST_ROLE_ID = '1558230381868752906';
 const STAFF_ROLE_ID = '1527141858239709234';
 const OWNER_ROLE_ID = '1526639797920075936';
 
-// ID da Categoria onde os tickets serão criados
 const TICKET_CATEGORY_ID = '1463015225241632788';
 
 const TICKET_BANNER = 'https://i.ibb.co/0pRJcfsP/Superliga-Caf-MPS-94.png'; 
@@ -117,7 +113,7 @@ let db = {
 const activeSchedules = [];
 const entrosarCooldowns = new Map(); 
 const narratedGames = []; 
-const pendingTickets = new Map(); 
+const lockedTickets = new Set();
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -170,99 +166,39 @@ client.once('ready', async () => {
     for (const [, guild] of client.guilds.cache) {
       await guild.commands.set([]).catch(() => {});
     }
-    console.log('[Discord] 🧹 Todos os comandos de barra (/) antigos foram removidos com sucesso!');
+    console.log('[Discord] 🧹 Todos os comandos de barra (/) antigos foram limpos!');
   } catch (err) {
     console.error('[ERRO LIMPEZA SLASH]:', err);
   }
-});
 
-// Manipulador de Interações (Cliques nos botões do painel de tickets)
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const customId = interaction.customId;
-  const ticketTypes = ['duvida', 'denuncia', 'parceria', 'inscrever', 'compra', 'transmissor'];
-
-  if (ticketTypes.includes(customId)) {
-    const guild = interaction.guild;
-    const member = interaction.member;
-
-    const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${customId}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`);
-    if (existingChannel) {
-      return interaction.reply({
-        content: `⚠️ Você já possui um ticket aberto em ${existingChannel}!`,
-        ephemeral: true
-      });
-    }
-
-    await interaction.deferReply({ ephemeral: true });
-
+  // Loop de fechamento automático de tickets após 5 horas (última mensagem de staff)
+  setInterval(async () => {
     try {
-      // Criação do canal privado do ticket dentro da categoria especificada
-      const ticketChannel = await guild.channels.create({
-        name: `ticket-${customId}-${member.user.username}`,
-        type: ChannelType.GuildText,
-        parent: TICKET_CATEGORY_ID, // Joga o ticket dentro da categoria correta
-        permissionOverwrites: [
-          {
-            id: guild.id, // @everyone negado
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          },
-          {
-            id: member.id, // O usuário que abriu tem acesso total
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.ReadMessageHistory,
-              PermissionsBitField.Flags.AttachFiles
-            ]
-          },
-          {
-            id: STAFF_TEST_ROLE_ID, // Staff em Teste
-            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-          },
-          {
-            id: STAFF_ROLE_ID, // Staff
-            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-          },
-          {
-            id: OWNER_ROLE_ID, // Dono
-            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+      for (const [, guild] of client.guilds.cache) {
+        const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.name.startsWith('ticket-'));
+        
+        for (const [, channel] of channels) {
+          if (lockedTickets.has(channel.id)) continue;
+
+          const messages = await channel.messages.fetch({ limit: 1 }).catch(() => null);
+          if (!messages || messages.size === 0) continue;
+
+          const lastMsg = messages.first();
+          const now = Date.now();
+          const diffHours = (now - lastMsg.createdTimestamp) / (1000 * 60 * 60);
+
+          if (diffHours >= 5) {
+            const authorMember = await guild.members.fetch(lastMsg.author.id).catch(() => null);
+            if (authorMember && isStaffOrOwner(authorMember)) {
+              await channel.delete('Fechamento automático por inatividade (última resposta da Staff).').catch(() => {});
+            }
           }
-        ]
-      });
-
-      pendingTickets.set(ticketChannel.id, { openerId: member.id, type: customId });
-
-      const embedTicketOpened = new EmbedBuilder()
-        .setColor(0x442604)
-        .setAuthor({ name: 'Federação Café ☕ 🍵', iconURL: TICKET_THUMBNAIL })
-        .setTitle('Informações do Ticket')
-        .setDescription(
-          `• Não abra ticket por brincadeiras, isso resultará em uma punição.\n` +
-          `• Apenas abra tickets de inscrição se as vagas estiverem abertas.\n` +
-          `• Leia a mensagem quando abrir ticket.\n\n` +
-          `Prezando por uma comunidade melhor. ☕ 🍵`
-        )
-        .setImage(TICKET_BANNER)
-        .setThumbnail(TICKET_THUMBNAIL)
-        .setTimestamp();
-
-      await ticketChannel.send({
-        content: `<@${member.id}> <@&${STAFF_ROLE_ID}> <@&${STAFF_TEST_ROLE_ID}>`,
-        embeds: [embedTicketOpened]
-      });
-
-      return interaction.editReply({
-        content: `✅ O seu ticket foi criado com sucesso em ${ticketChannel}!`
-      });
-    } catch (err) {
-      console.error('[ERRO CRIAR TICKET]:', err);
-      return interaction.editReply({
-        content: '❌ Ocorreu um erro ao criar o seu ticket. Avise a administração.'
-      });
+        }
+      }
+    } catch (e) {
+      console.error('[ERRO AUTO-CLOSE TICKETS]:', e);
     }
-  }
+  }, 10 * 60 * 1000);
 });
 
 function getUserTeam(member) {
@@ -282,14 +218,7 @@ function isCoach(member) {
 function isStaffOrOwner(member) {
   if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
   if (member.roles.cache.has(STAFF_ROLE_ID) || member.roles.cache.has(OWNER_ROLE_ID) || member.roles.cache.has(STAFF_TEST_ROLE_ID)) return true;
-  
-  const adminAllowedRoles = [
-    '1558230381868752906', 
-    '1527141858239709234', 
-    '1526639797920075936'  
-  ];
-
-  return adminAllowedRoles.some(roleId => member.roles.cache.has(roleId));
+  return false;
 }
 
 function parseIntervalToMs(intervalStr) {
@@ -307,60 +236,92 @@ function parseIntervalToMs(intervalStr) {
   return null;
 }
 
+// Manipulador de Interações (Botões)
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  const customId = interaction.customId;
+
+  // Botão de fechar o ticket
+  if (customId === 'fechar_ticket') {
+    const member = interaction.member;
+    const isOwnerOfTicket = interaction.channel.name.includes(member.user.username.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    
+    if (!isOwnerOfTicket && !isStaffOrOwner(member)) {
+      return interaction.reply({
+        content: '❌ Apenas a staff ou quem abriu o ticket pode fechá-lo.',
+        ephemeral: true
+      });
+    }
+
+    await interaction.reply({ content: '🔒 Fechando este ticket em instantes...', ephemeral: true });
+    setTimeout(() => {
+      interaction.channel.delete().catch(() => {});
+    }, 2000);
+    return;
+  }
+
+  // Abertura de Tickets pelas Categorias do Painel
+  const ticketTypes = ['duvida', 'denuncia', 'parceria', 'inscrever', 'compra', 'transmissor'];
+  if (ticketTypes.includes(customId)) {
+    const guild = interaction.guild;
+    const member = interaction.member;
+
+    const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${customId}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`);
+    if (existingChannel) {
+      return interaction.reply({
+        content: `⚠️ Você já possui um ticket aberto em ${existingChannel}!`,
+        ephemeral: true
+      });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+      const ticketChannel = await guild.channels.create({
+        name: `ticket-${customId}-${member.user.username}`,
+        type: ChannelType.GuildText,
+        parent: TICKET_CATEGORY_ID,
+        permissionOverwrites: [
+          { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] },
+          { id: STAFF_TEST_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+          { id: STAFF_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+          { id: OWNER_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
+        ]
+      });
+
+      const embedTicketOpened = new EmbedBuilder()
+        .setColor(0xF1C40F)
+        .setTitle('Ticket Aberto')
+        .setDescription(`<@${member.id}> criou um novo ticket 🤝 **${customId.toUpperCase()}**.`);
+
+      const rowClose = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('fechar_ticket').setLabel('Fechar').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+      );
+
+      await ticketChannel.send({
+        content: `<@${member.id}> <@&${STAFF_ROLE_ID}> <@&${STAFF_TEST_ROLE_ID}>`,
+        embeds: [embedTicketOpened],
+        components: [rowClose]
+      });
+
+      return interaction.editReply({
+        content: `✅ O seu ticket foi criado com sucesso em ${ticketChannel}!`
+      });
+    } catch (err) {
+      console.error('[ERRO CRIAR TICKET]:', err);
+      return interaction.editReply({
+        content: '❌ Ocorreu um erro ao criar o seu ticket.'
+      });
+    }
+  }
+});
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  if (pendingTickets.has(message.channel.id)) {
-    const ticketData = pendingTickets.get(message.channel.id);
-    if (message.author.id === ticketData.openerId) {
-      pendingTickets.delete(message.channel.id);
-
-      const footerNote = `\n\n-# Essa resposta é automática e não é modificada por IA.`;
-      const userMention = `<@${ticketData.openerId}>`;
-
-      if (ticketData.type === 'parceria') {
-        await message.reply(
-          `${userMention} 👋 **Atenção antes de aguardar atendimento:**\n` +
-          `📌 Envie agora o **texto da sua parceria** junto com o **link do seu servidor do Discord** (mínimo de 100 membros).` +
-          footerNote
-        );
-      } else if (ticketData.type === 'duvida') {
-        await message.reply(
-          `${userMention} 🤔 **Para agilizar o seu atendimento:**\n` +
-          `📌 Escreva a sua **dúvida completa** logo abaixo. Não mande apenas "oi" ou "olá"!` +
-          footerNote
-        );
-      } else if (ticketData.type === 'denuncia') {
-        await message.reply(
-          `${userMention} 🚨 **Para validar a sua denúncia:**\n` +
-          `📌 Envie o **ID/menção do acusado** e as **provas (prints ou vídeos)** agora mesmo.` +
-          footerNote
-        );
-      } else if (ticketData.type === 'inscrever') {
-        await message.reply(
-          `${userMention} Vagas fechadas!, não é possivel ownar, apenas é possível **pagar 5 reais ou 200 robux para Ficar na Fila De Espera pra próxima season ou para o próximo time que tomar Disband!**` +
-          footerNote
-        );
-      } else if (ticketData.type === 'compra') {
-        await message.reply(
-          `${userMention} 🛒 **Atendimento de Compras:**\n` +
-          `📌 Informe **qual produto/pacote deseja adquirir** e a **forma de pagamento** (Robux ou Pix).` +
-          footerNote
-        );
-      } else if (ticketData.type === 'transmissor') {
-        await message.reply(
-          `${userMention}\n` +
-          `☕| Narrador\n` +
-          `- Sabe colocar placar na tela?\n` +
-          `- Qual sua Plataforma?\n` +
-          `- Como você transmite?\n` +
-          `- Tem uma equipe?` +
-          footerNote
-        );
-      }
-    }
-  }
-
+  // Filtro de Palavras Proibidas (Auto-Mod)
   if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
     const contentLower = message.content.toLowerCase();
     const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
@@ -379,6 +340,24 @@ client.on('messageCreate', async (message) => {
   const cmdCheck = argsCheck.shift().toLowerCase();
   const member = message.member;
 
+  // Comandos de Lock/Unlock do Ticket
+  if (cmdCheck === 'lockticket') {
+    if (!isStaffOrOwner(member)) return message.reply('❌ Apenas staff.');
+    if (!message.channel.name.startsWith('ticket-')) return message.reply('⚠️ Este comando só pode ser usado dentro de um canal de ticket.');
+    
+    lockedTickets.add(message.channel.id);
+    return message.reply('🔒 **Fechamento automático desativado** para este ticket.');
+  }
+
+  if (cmdCheck === 'unlockticket') {
+    if (!isStaffOrOwner(member)) return message.reply('❌ Apenas staff.');
+    if (!message.channel.name.startsWith('ticket-')) return message.reply('⚠️ Este comando só pode ser usado dentro de um canal de ticket.');
+    
+    lockedTickets.delete(message.channel.id);
+    return message.reply('🔓 **Fechamento automático reativado** para este ticket.');
+  }
+
+  // Comando %narrar
   if (cmdCheck === 'narrar') {
     const targetNarrarChannel = '1553887041689751664';
     const allowedNarrarRole = '1527044059976175738';
@@ -478,6 +457,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
+  // Canal restrito de comandos
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
@@ -496,6 +476,7 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  // Sistema de Free Agency (!freeagency / !fa)
   if (isCmdExclamation) {
     const argsFA = message.content.slice(1).trim().split(/ +/);
     const commandFA = argsFA.shift().toLowerCase();
@@ -532,7 +513,6 @@ client.on('messageCreate', async (message) => {
   ];
 
   if (adminCommandsList.includes(command)) {
-    
     if (!isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
     }
@@ -1000,6 +980,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
+  // Gestão de Assistentes
   if (command === 'setassistent') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem usar este comando.');
     
