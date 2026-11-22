@@ -114,6 +114,7 @@ const activeSchedules = [];
 const entrosarCooldowns = new Map(); 
 const narratedGames = []; 
 const lockedTickets = new Set();
+const pendingTickets = new Map();
 
 function loadDatabase() {
   if (fs.existsSync(DB_PATH)) {
@@ -190,6 +191,7 @@ client.once('ready', async () => {
           if (diffHours >= 5) {
             const authorMember = await guild.members.fetch(lastMsg.author.id).catch(() => null);
             if (authorMember && isStaffOrOwner(authorMember)) {
+              pendingTickets.delete(channel.id);
               await channel.delete('Fechamento automático por inatividade (última resposta da Staff).').catch(() => {});
             }
           }
@@ -254,6 +256,9 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
+    pendingTickets.delete(interaction.channel.id);
+    lockedTickets.delete(interaction.channel.id);
+
     await interaction.reply({ content: '🔒 Fechando este ticket em instantes...', ephemeral: true });
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
@@ -291,6 +296,9 @@ client.on('interactionCreate', async (interaction) => {
         ]
       });
 
+      // Guarda quem abriu e qual o tipo para responder na primeira mensagem
+      pendingTickets.set(ticketChannel.id, { openerId: member.id, type: customId });
+
       const embedTicketOpened = new EmbedBuilder()
         .setColor(0xF1C40F)
         .setTitle('Ticket Aberto')
@@ -320,6 +328,58 @@ client.on('interactionCreate', async (interaction) => {
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
+
+  // Resposta automática na primeira mensagem do autor do ticket
+  if (pendingTickets.has(message.channel.id)) {
+    const ticketData = pendingTickets.get(message.channel.id);
+    if (message.author.id === ticketData.openerId) {
+      pendingTickets.delete(message.channel.id);
+
+      const footerNote = `\n\n-# Essa resposta é automática e não é modificada por IA.`;
+      const userMention = `<@${ticketData.openerId}>`;
+
+      if (ticketData.type === 'parceria') {
+        await message.reply(
+          `${userMention} 👋 **Atenção antes de aguardar atendimento:**\n` +
+          `📌 Envie agora o **texto da sua parceria** junto com o **link do seu servidor do Discord** (mínimo de 100 membros).` +
+          footerNote
+        );
+      } else if (ticketData.type === 'duvida') {
+        await message.reply(
+          `${userMention} 🤔 **Para agilizar o seu atendimento:**\n` +
+          `📌 Escreva a sua **dúvida completa** logo abaixo. Não mande apenas "oi" ou "olá"!` +
+          footerNote
+        );
+      } else if (ticketData.type === 'denuncia') {
+        await message.reply(
+          `${userMention} 🚨 **Para validar a sua denúncia:**\n` +
+          `📌 Envie o **ID/menção do acusado** e as **provas (prints ou vídeos)** agora mesmo.` +
+          footerNote
+        );
+      } else if (ticketData.type === 'inscrever') {
+        await message.reply(
+          `${userMention} Vagas fechadas!, não é possivel ownar, apenas é possível **pagar 5 reais ou 200 robux para Ficar na Fila De Espera pra próxima season ou para o próximo time que tomar Disband!**` +
+          footerNote
+        );
+      } else if (ticketData.type === 'compra') {
+        await message.reply(
+          `${userMention} 🛒 **Atendimento de Compras:**\n` +
+          `📌 Informe **qual produto/pacote deseja adquirir** e a **forma de pagamento** (Robux ou Pix).` +
+          footerNote
+        );
+      } else if (ticketData.type === 'transmissor') {
+        await message.reply(
+          `${userMention}\n` +
+          `☕| Narrador\n` +
+          `- Sabe colocar placar na tela?\n` +
+          `- Qual sua Plataforma?\n` +
+          `- Como você transmite?\n` +
+          `- Tem uma equipe?` +
+          footerNote
+        );
+      }
+    }
+  }
 
   // Filtro de Palavras Proibidas (Auto-Mod)
   if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
@@ -641,7 +701,7 @@ client.on('messageCreate', async (message) => {
         .setTitle('📚 Tutorial Completo - Federation Café Bot')
         .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
         .addFields(
-          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%ticket`' },
+          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%ticket` / `%lockticket` / `%unlockticket`' },
           { name: '🛡️ Moderação, Punições, Filtro e Cup-Tied', value: '• `%warn @usuario <motivo>`\n• `%black @usuario <motivo> <tempo> <robux> <pix>`\n• `%unblack @usuario C <motivo>`\n• `%addpalavra` / `%removepalavra` / `%listapalavras`\n• `%eliminado @Time` / `%deseliminar @Time`' },
           { name: '👔 Gestão de Assistentes (Club Owners)', value: '• `%setassistent @jogador` - Atribui cargo de assistente a um membro do mesmo time.\n• `%removeassistent @jogador` - Remove o cargo de assistente.' },
           { name: '📅 Agendamento e Times', value: '• `%agendar` / `%listagendados` / `%desagendar`\n• `%teams` / `%roster` / `%addteam` / `%addteams` / `%removeteam`' },
