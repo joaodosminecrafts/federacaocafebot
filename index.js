@@ -6,7 +6,8 @@ const {
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle, 
-  ComponentType 
+  ComponentType,
+  ChannelType 
 } = require('discord.js');
 const { Agent, setGlobalDispatcher } = require('undici');
 const express = require('express');
@@ -25,10 +26,21 @@ app.listen(PORT, () => console.log(`[Express] Servidor ativo na porta ${PORT}`))
 
 const DB_PATH = path.join(__dirname, 'league_config.json');
 
-// IDs dos cargos configurados:
+// IDs dos cargos e links visuais personalizados
 const CUP_TIED_ROLE_ID = '1572396208482426910';
 const ASSISTANT_ROLE_ID = '1565186858382528593';
 const VERIFIED_ROLE_ID = '1526089498570522666';
+
+// Cargos de Staff / Moderação com acesso aos tickets
+const STAFF_TEST_ROLE_ID = '1558230381868752906';
+const STAFF_ROLE_ID = '1527141858239709234';
+const OWNER_ROLE_ID = '1526639797920075936';
+
+// ID da Categoria onde os tickets serão criados
+const TICKET_CATEGORY_ID = '1463015225241632788';
+
+const TICKET_BANNER = 'https://i.ibb.co/0pRJcfsP/Superliga-Caf-MPS-94.png'; 
+const TICKET_THUMBNAIL = 'https://cdn.discordapp.com/icons/1463007976670498900/a_2fc2b2afa81fdc27762088d5dab31498.gif?size=256';
 
 const DEFAULT_TEAMS = [
   // First Division
@@ -164,31 +176,90 @@ client.once('ready', async () => {
   }
 });
 
-// Evento de clique para o botão verde de verificação direta
+// Manipulador de Interações (Cliques nos botões do painel de tickets)
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
-  if (interaction.customId === 'btn_verificar_direto') {
+  const customId = interaction.customId;
+  const ticketTypes = ['duvida', 'denuncia', 'parceria', 'inscrever', 'compra', 'transmissor'];
+
+  if (ticketTypes.includes(customId)) {
+    const guild = interaction.guild;
     const member = interaction.member;
 
-    if (member.roles.cache.has(VERIFIED_ROLE_ID)) {
+    const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${customId}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`);
+    if (existingChannel) {
       return interaction.reply({
-        content: '⚠️ Você já está verificado!',
+        content: `⚠️ Você já possui um ticket aberto em ${existingChannel}!`,
         ephemeral: true
       });
     }
 
+    await interaction.deferReply({ ephemeral: true });
+
     try {
-      await member.roles.add(VERIFIED_ROLE_ID);
-      return interaction.reply({
-        content: '✅ **Verificado com sucesso!** O seu acesso aos canais foi liberado.',
-        ephemeral: true
+      // Criação do canal privado do ticket dentro da categoria especificada
+      const ticketChannel = await guild.channels.create({
+        name: `ticket-${customId}-${member.user.username}`,
+        type: ChannelType.GuildText,
+        parent: TICKET_CATEGORY_ID, // Joga o ticket dentro da categoria correta
+        permissionOverwrites: [
+          {
+            id: guild.id, // @everyone negado
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: member.id, // O usuário que abriu tem acesso total
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+              PermissionsBitField.Flags.AttachFiles
+            ]
+          },
+          {
+            id: STAFF_TEST_ROLE_ID, // Staff em Teste
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+          },
+          {
+            id: STAFF_ROLE_ID, // Staff
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+          },
+          {
+            id: OWNER_ROLE_ID, // Dono
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+          }
+        ]
+      });
+
+      pendingTickets.set(ticketChannel.id, { openerId: member.id, type: customId });
+
+      const embedTicketOpened = new EmbedBuilder()
+        .setColor(0x442604)
+        .setAuthor({ name: 'Federação Café ☕ 🍵', iconURL: TICKET_THUMBNAIL })
+        .setTitle('Informações do Ticket')
+        .setDescription(
+          `• Não abra ticket por brincadeiras, isso resultará em uma punição.\n` +
+          `• Apenas abra tickets de inscrição se as vagas estiverem abertas.\n` +
+          `• Leia a mensagem quando abrir ticket.\n\n` +
+          `Prezando por uma comunidade melhor. ☕ 🍵`
+        )
+        .setImage(TICKET_BANNER)
+        .setThumbnail(TICKET_THUMBNAIL)
+        .setTimestamp();
+
+      await ticketChannel.send({
+        content: `<@${member.id}> <@&${STAFF_ROLE_ID}> <@&${STAFF_TEST_ROLE_ID}>`,
+        embeds: [embedTicketOpened]
+      });
+
+      return interaction.editReply({
+        content: `✅ O seu ticket foi criado com sucesso em ${ticketChannel}!`
       });
     } catch (err) {
-      console.error('[ERRO AO DAR CARGO]:', err);
-      return interaction.reply({
-        content: '❌ Ocorreu um erro ao entregar o seu cargo. Avise a administração.',
-        ephemeral: true
+      console.error('[ERRO CRIAR TICKET]:', err);
+      return interaction.editReply({
+        content: '❌ Ocorreu um erro ao criar o seu ticket. Avise a administração.'
       });
     }
   }
@@ -210,11 +281,12 @@ function isCoach(member) {
 
 function isStaffOrOwner(member) {
   if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+  if (member.roles.cache.has(STAFF_ROLE_ID) || member.roles.cache.has(OWNER_ROLE_ID) || member.roles.cache.has(STAFF_TEST_ROLE_ID)) return true;
   
   const adminAllowedRoles = [
-    '1558230381868752906', // Staff Em Teste
-    '1527141858239709234', // Staff
-    '1526639797920075936'  // Dono / Outro cargo pré-existente
+    '1558230381868752906', 
+    '1527141858239709234', 
+    '1526639797920075936'  
   ];
 
   return adminAllowedRoles.some(roleId => member.roles.cache.has(roleId));
@@ -236,39 +308,7 @@ function parseIntervalToMs(intervalStr) {
 }
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot && message.channel.name && message.channel.name.toLowerCase().startsWith('ticket-')) {
-    if (message.embeds.length > 0) {
-      const embedDesc = (message.embeds[0].description || '').toLowerCase();
-      const userIdMatch = (message.embeds[0].description || '').match(/<@!?(\d+)>/);
-      const openerId = userIdMatch ? userIdMatch[1] : null;
-
-      if (embedDesc.includes('criou um novo ticket') && openerId) {
-        let ticketType = null;
-        if (embedDesc.includes('parceria')) ticketType = 'parceria';
-        else if (embedDesc.includes('dúvida') || embedDesc.includes('duvida')) ticketType = 'duvida';
-        else if (embedDesc.includes('denúncia') || embedDesc.includes('denuncia')) ticketType = 'denuncia';
-        else if (embedDesc.includes('inscrever') || embedDesc.includes('inscrição')) ticketType = 'inscrever';
-        else if (embedDesc.includes('compra')) ticketType = 'compra';
-        else if (embedDesc.includes('transmissor') || embedDesc.includes('narrador')) ticketType = 'transmissor';
-
-        if (ticketType) {
-          pendingTickets.set(message.channel.id, { openerId, type: ticketType });
-        }
-      }
-    }
-    return;
-  }
-
   if (message.author.bot || !message.guild) return;
-
-  if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
-    const contentLower = message.content.toLowerCase();
-    const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
-    if (hasBannedWord) {
-      await message.delete().catch(() => {});
-      return;
-    }
-  }
 
   if (pendingTickets.has(message.channel.id)) {
     const ticketData = pendingTickets.get(message.channel.id);
@@ -318,6 +358,15 @@ client.on('messageCreate', async (message) => {
           footerNote
         );
       }
+    }
+  }
+
+  if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
+    const contentLower = message.content.toLowerCase();
+    const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
+    if (hasBannedWord) {
+      await message.delete().catch(() => {});
+      return;
     }
   }
 
@@ -432,7 +481,7 @@ client.on('messageCreate', async (message) => {
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'verificar'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'ticket'
   ].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
@@ -479,7 +528,7 @@ client.on('messageCreate', async (message) => {
     'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
     'setownercargos', 'addteam', 'addteams', 'removeteam', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'verificar'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'ticket'
   ];
 
   if (adminCommandsList.includes(command)) {
@@ -488,23 +537,35 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
     }
 
-    if (command === 'verificar') {
-      const embedVerify = new EmbedBuilder()
-        .setColor(0xF1C40F)
-        .setTitle('Se Verificar 🔒')
-        .setDescription('Clique no Botão verde "Verificar" para ter acesso a **todos os canais!**')
-        .setFooter({ text: 'Verificação rápida e segura por Botão.' })
+    if (command === 'ticket') {
+      const embedTicketPanel = new EmbedBuilder()
+        .setColor(0x442604)
+        .setAuthor({ name: 'Federação Café ☕ 🍵', iconURL: TICKET_THUMBNAIL })
+        .setTitle('Informações do Ticket')
+        .setDescription(
+          `• Não abra ticket por brincadeiras, isso resultará em uma punição.\n` +
+          `• Apenas abra tickets de inscrição se as vagas estiverem abertas.\n` +
+          `• Leia a mensagem quando abrir ticket.\n\n` +
+          `Prezando por uma comunidade melhor. ☕ 🍵`
+        )
+        .setImage(TICKET_BANNER)
+        .setThumbnail(TICKET_THUMBNAIL)
         .setTimestamp();
 
-      const rowVerify = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('btn_verificar_direto')
-          .setLabel('Verificar')
-          .setStyle(ButtonStyle.Success)
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('duvida').setLabel('DÚVIDA').setStyle(ButtonStyle.Primary).setEmoji('🤔'),
+        new ButtonBuilder().setCustomId('denuncia').setLabel('DENÚNCIA').setStyle(ButtonStyle.Danger).setEmoji('💸'),
+        new ButtonBuilder().setCustomId('parceria').setLabel('PARCERIA').setStyle(ButtonStyle.Success).setEmoji('🤝')
+      );
+
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('inscrever').setLabel('SE INSCREVER').setStyle(ButtonStyle.Secondary).setEmoji('✔️'),
+        new ButtonBuilder().setCustomId('compra').setLabel('COMPRA').setStyle(ButtonStyle.Secondary).setEmoji('🛒'),
+        new ButtonBuilder().setCustomId('transmissor').setLabel('SER TRANSMISSOR').setStyle(ButtonStyle.Primary).setEmoji('🎧')
       );
 
       await message.delete().catch(() => {});
-      return message.channel.send({ embeds: [embedVerify], components: [rowVerify] });
+      return message.channel.send({ embeds: [embedTicketPanel], components: [row1, row2] });
     }
 
     if (command === 'eliminado') {
@@ -600,7 +661,7 @@ client.on('messageCreate', async (message) => {
         .setTitle('📚 Tutorial Completo - Federation Café Bot')
         .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
         .addFields(
-          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%verificar`' },
+          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%ticket`' },
           { name: '🛡️ Moderação, Punições, Filtro e Cup-Tied', value: '• `%warn @usuario <motivo>`\n• `%black @usuario <motivo> <tempo> <robux> <pix>`\n• `%unblack @usuario C <motivo>`\n• `%addpalavra` / `%removepalavra` / `%listapalavras`\n• `%eliminado @Time` / `%deseliminar @Time`' },
           { name: '👔 Gestão de Assistentes (Club Owners)', value: '• `%setassistent @jogador` - Atribui cargo de assistente a um membro do mesmo time.\n• `%removeassistent @jogador` - Remove o cargo de assistente.' },
           { name: '📅 Agendamento e Times', value: '• `%agendar` / `%listagendados` / `%desagendar`\n• `%teams` / `%roster` / `%addteam` / `%addteams` / `%removeteam`' },
