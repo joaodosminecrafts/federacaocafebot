@@ -188,7 +188,7 @@ client.once('ready', async () => {
           const now = Date.now();
           const diffHours = (now - lastMsg.createdTimestamp) / (1000 * 60 * 60);
 
-          if (diffHours >= 5) {
+          if (diffHours >= 1) {
             const authorMember = await guild.members.fetch(lastMsg.author.id).catch(() => null);
             if (authorMember && isStaffOrOwner(authorMember)) {
               pendingTickets.delete(channel.id);
