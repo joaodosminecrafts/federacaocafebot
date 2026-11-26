@@ -107,7 +107,8 @@ let db = {
   ownerRoleIds: [], 
   bannedWords: DEFAULT_BANNED_WORDS,
   eliminatedChampionsRoles: [],
-  teams: DEFAULT_TEAMS
+  teams: DEFAULT_TEAMS,
+  verifyMessageId: null // Armazena o ID da mensagem de verificação para o sistema de reações
 };
 
 const activeSchedules = [];
@@ -154,7 +155,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.DirectMessages
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildMessageReactions
   ],
   rest: { timeout: 60000, retries: 3 }
 });
@@ -172,7 +174,7 @@ client.once('ready', async () => {
     console.error('[ERRO LIMPEZA SLASH]:', err);
   }
 
-  // Loop de fechamento automático de tickets após 5 horas (última mensagem de staff)
+  // Loop de fechamento automático de tickets após 1 hora (última mensagem de staff)
   setInterval(async () => {
     try {
       for (const [, guild] of client.guilds.cache) {
@@ -192,7 +194,7 @@ client.once('ready', async () => {
             const authorMember = await guild.members.fetch(lastMsg.author.id).catch(() => null);
             if (authorMember && isStaffOrOwner(authorMember)) {
               pendingTickets.delete(channel.id);
-              await channel.delete('Fechamento automático por inatividade (última resposta da Staff).').catch(() => {});
+              await channel.delete('Fechamento automático por inatividade (1h após resposta da Staff).').catch(() => {});
             }
           }
         }
@@ -200,7 +202,7 @@ client.once('ready', async () => {
     } catch (e) {
       console.error('[ERRO AUTO-CLOSE TICKETS]:', e);
     }
-  }, 10 * 60 * 1000);
+  }, 5 * 60 * 1000);
 });
 
 function getUserTeam(member) {
@@ -238,13 +240,45 @@ function parseIntervalToMs(intervalStr) {
   return null;
 }
 
-// Manipulador de Interações (Botões)
+// Eventos de Reação para o cargo de Verificado
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+  if (reaction.partial) await reaction.fetch().catch(() => {});
+  
+  if (db.verifyMessageId && reaction.message.id === db.verifyMessageId) {
+    if (reaction.emoji.name === '🔒') {
+      const guild = reaction.message.guild;
+      if (!guild) return;
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (member && !member.roles.cache.has(VERIFIED_ROLE_ID)) {
+        await member.roles.add(VERIFIED_ROLE_ID).catch(() => {});
+      }
+    }
+  }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (user.bot) return;
+  if (reaction.partial) await reaction.fetch().catch(() => {});
+  
+  if (db.verifyMessageId && reaction.message.id === db.verifyMessageId) {
+    if (reaction.emoji.name === '🔒') {
+      const guild = reaction.message.guild;
+      if (!guild) return;
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (member && member.roles.cache.has(VERIFIED_ROLE_ID)) {
+        await member.roles.remove(VERIFIED_ROLE_ID).catch(() => {});
+      }
+    }
+  }
+});
+
+// Manipulador de Interações (Botões de Tickets)
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
   const customId = interaction.customId;
 
-  // Botão de fechar o ticket
   if (customId === 'fechar_ticket') {
     const member = interaction.member;
     const isOwnerOfTicket = interaction.channel.name.includes(member.user.username.toLowerCase().replace(/[^a-z0-9]/g, ''));
@@ -266,7 +300,6 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
-  // Abertura de Tickets pelas Categorias do Painel
   const ticketTypes = ['duvida', 'denuncia', 'parceria', 'inscrever', 'compra', 'transmissor'];
   if (ticketTypes.includes(customId)) {
     const guild = interaction.guild;
@@ -296,7 +329,6 @@ client.on('interactionCreate', async (interaction) => {
         ]
       });
 
-      // Guarda quem abriu e qual o tipo para responder na primeira mensagem
       pendingTickets.set(ticketChannel.id, { openerId: member.id, type: customId });
 
       const embedTicketOpened = new EmbedBuilder()
@@ -329,7 +361,6 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
 
-  // Resposta automática na primeira mensagem do autor do ticket
   if (pendingTickets.has(message.channel.id)) {
     const ticketData = pendingTickets.get(message.channel.id);
     if (message.author.id === ticketData.openerId) {
@@ -381,7 +412,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Filtro de Palavras Proibidas (Auto-Mod)
   if (db.bannedWords && db.bannedWords.length > 0 && message.member && !isStaffOrOwner(message.member)) {
     const contentLower = message.content.toLowerCase();
     const hasBannedWord = db.bannedWords.some(word => contentLower.includes(word.toLowerCase()));
@@ -400,7 +430,6 @@ client.on('messageCreate', async (message) => {
   const cmdCheck = argsCheck.shift().toLowerCase();
   const member = message.member;
 
-  // Comandos de Lock/Unlock do Ticket
   if (cmdCheck === 'lockticket') {
     if (!isStaffOrOwner(member)) return message.reply('❌ Apenas staff.');
     if (!message.channel.name.startsWith('ticket-')) return message.reply('⚠️ Este comando só pode ser usado dentro de um canal de ticket.');
@@ -417,7 +446,6 @@ client.on('messageCreate', async (message) => {
     return message.reply('🔓 **Fechamento automático reativado** para este ticket.');
   }
 
-  // Comando %narrar
   if (cmdCheck === 'narrar') {
     const targetNarrarChannel = '1553887041689751664';
     const allowedNarrarRole = '1527044059976175738';
@@ -517,11 +545,10 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Canal restrito de comandos
   const isAdminOrStaffCmd = [
     'setcommandschannel', 'setmarketchannel', 'setfachannel', 'setblacklistchannel', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'ticket'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'ticket', 'verificar'
   ].includes(cmdCheck);
 
   if (db.commandsChannelId && message.channel.id !== db.commandsChannelId && !isAdminOrStaffCmd && !isStaffOrOwner(member)) {
@@ -536,7 +563,6 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Sistema de Free Agency (!freeagency / !fa)
   if (isCmdExclamation) {
     const argsFA = message.content.slice(1).trim().split(/ +/);
     const commandFA = argsFA.shift().toLowerCase();
@@ -569,12 +595,28 @@ client.on('messageCreate', async (message) => {
     'setblacklistchannel', 'setcommandschannel', 'setrosterlimit', 
     'setownercargos', 'addteam', 'addteams', 'removeteam', 
     'black', 'unblack', 'warn', 'agendar', 'desagendar', 'listagendados', 'limparnarracoes',
-    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'ticket'
+    'addpalavra', 'removepalavra', 'listapalavras', 'eliminado', 'deseliminar', 'tutorial', 'ticket', 'verificar'
   ];
 
   if (adminCommandsList.includes(command)) {
     if (!isStaffOrOwner(member)) {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
+    }
+
+    // Comando %verificar (idêntico ao modelo da foto, com cor #ffe500 e reação de cadeado)
+    if (command === 'verificar') {
+      const embedVerify = new EmbedBuilder()
+        .setColor(0xFFE500)
+        .setDescription('**Verificação 🔓**\n\nClique no emoji de Cadeado 🔓 abaixo da mensagem para se verificar.');
+
+      await message.delete().catch(() => {});
+      const sentMsg = await message.channel.send({ embeds: [embedVerify] });
+      await sentMsg.react('🔒').catch(() => {});
+      
+      // Salva o ID da mensagem de verificação na base de dados para monitorar as reações
+      db.verifyMessageId = sentMsg.id;
+      saveDatabase();
+      return;
     }
 
     if (command === 'ticket') {
@@ -701,7 +743,7 @@ client.on('messageCreate', async (message) => {
         .setTitle('📚 Tutorial Completo - Federation Café Bot')
         .setDescription('Aqui está a lista de todos os comandos e funções do bot organizadas para a administração e gestão da liga:')
         .addFields(
-          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%ticket` / `%lockticket` / `%unlockticket`' },
+          { name: '⚙️ Comandos de Configuração e Gestão', value: '• `%setcommandschannel #canal`\n• `%setmarketchannel #canal`\n• `%setfachannel #canal`\n• `%setblacklistchannel #canal`\n• `%abrirjanela` / `%fecharjanela`\n• `%setrosterlimit <número>`\n• `%ticket` / `%verificar`' },
           { name: '🛡️ Moderação, Punições, Filtro e Cup-Tied', value: '• `%warn @usuario <motivo>`\n• `%black @usuario <motivo> <tempo> <robux> <pix>`\n• `%unblack @usuario C <motivo>`\n• `%addpalavra` / `%removepalavra` / `%listapalavras`\n• `%eliminado @Time` / `%deseliminar @Time`' },
           { name: '👔 Gestão de Assistentes (Club Owners)', value: '• `%setassistent @jogador` - Atribui cargo de assistente a um membro do mesmo time.\n• `%removeassistent @jogador` - Remove o cargo de assistente.' },
           { name: '📅 Agendamento e Times', value: '• `%agendar` / `%listagendados` / `%desagendar`\n• `%teams` / `%roster` / `%addteam` / `%addteams` / `%removeteam`' },
@@ -791,7 +833,7 @@ client.on('messageCreate', async (message) => {
           tempoVal = remainingText.substring(lastSpace + 1).trim();
         } else {
           motivoVal = remainingText;
-          tempoVal = 'Não especificado';
+          tempoVal = 'Not specified';
         }
       }
 
@@ -803,6 +845,7 @@ client.on('messageCreate', async (message) => {
       const robuxEmoji = '<:robux:1553191661545193603>';
       const pixEmoji = '<:pix:1560853388034445485>';
 
+      // Embed atualizado com a logo do servidor e o footer personalizado
       const embed = new EmbedBuilder()
         .setColor(0x2B2D31)
         .setDescription(
@@ -811,14 +854,18 @@ client.on('messageCreate', async (message) => {
           `**Tempo:** ${tempoVal}\n` +
           `**Bail:** ${robuxVal} ${robuxEmoji} ${pixVal} ${pixEmoji}`
         )
-        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }));
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
+        .setFooter({ text: 'Prezando por uma comunidade melhor.', iconURL: TICKET_THUMBNAIL });
 
       const attachment = message.attachments.first();
       if (attachment && attachment.contentType && attachment.contentType.startsWith('image/')) {
         embed.setImage(attachment.url);
       }
 
-      await blacklistChannel.send({ embeds: [embed] });
+      // Mensagem content fora do embed indicando quem baniu
+      const banContent = `Banimento registrado por: <@${member.id}>`;
+
+      await blacklistChannel.send({ content: banContent, embeds: [embed] });
 
       try {
         await guild.members.ban(targetUser.id, { 
@@ -859,9 +906,11 @@ client.on('messageCreate', async (message) => {
           `**Usuário:** ${targetUser.username}\n` +
           `**Estado:** ${emojiStatus} ${estadoFinal}`
         )
-        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }));
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 256 }))
+        .setFooter({ text: 'Prezando por uma comunidade melhor.', iconURL: TICKET_THUMBNAIL });
 
-      await blacklistChannel.send({ embeds: [embed] });
+      const appealContent = `Apelação registrada por: <@${member.id}>`;
+      await blacklistChannel.send({ content: appealContent, embeds: [embed] });
 
       if (statusLetter === 'C') {
         try {
@@ -1040,7 +1089,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Gestão de Assistentes
   if (command === 'setassistent') {
     if (!isCoach(member)) return message.reply('❌ Apenas Coaches/Owners podem usar este comando.');
     
