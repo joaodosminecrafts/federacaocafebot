@@ -1,6 +1,7 @@
 const { 
   Client, 
   GatewayIntentBits, 
+  Partials,
   PermissionsBitField, 
   EmbedBuilder, 
   ActionRowBuilder, 
@@ -108,7 +109,7 @@ let db = {
   bannedWords: DEFAULT_BANNED_WORDS,
   eliminatedChampionsRoles: [],
   teams: DEFAULT_TEAMS,
-  verifyMessageId: null // Armazena o ID da mensagem de verificação para o sistema de reações
+  verifyMessageId: null
 };
 
 const activeSchedules = [];
@@ -157,6 +158,11 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMessageReactions
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.Reaction
   ],
   rest: { timeout: 60000, retries: 3 }
 });
@@ -243,10 +249,12 @@ function parseIntervalToMs(intervalStr) {
 // Eventos de Reação para o cargo de Verificado
 client.on('messageReactionAdd', async (reaction, user) => {
   if (user.bot) return;
-  if (reaction.partial) await reaction.fetch().catch(() => {});
+  if (reaction.partial) {
+    try { await reaction.fetch(); } catch (e) { return; }
+  }
   
   if (db.verifyMessageId && reaction.message.id === db.verifyMessageId) {
-    if (reaction.emoji.name === '🔒') {
+    if (reaction.emoji.name === '🔓' || reaction.emoji.name === '🔒') {
       const guild = reaction.message.guild;
       if (!guild) return;
       const member = await guild.members.fetch(user.id).catch(() => null);
@@ -259,10 +267,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 client.on('messageReactionRemove', async (reaction, user) => {
   if (user.bot) return;
-  if (reaction.partial) await reaction.fetch().catch(() => {});
+  if (reaction.partial) {
+    try { await reaction.fetch(); } catch (e) { return; }
+  }
   
   if (db.verifyMessageId && reaction.message.id === db.verifyMessageId) {
-    if (reaction.emoji.name === '🔒') {
+    if (reaction.emoji.name === '🔓' || reaction.emoji.name === '🔒') {
       const guild = reaction.message.guild;
       if (!guild) return;
       const member = await guild.members.fetch(user.id).catch(() => null);
@@ -603,7 +613,6 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Apenas Administradores, Staffs ou Donos podem usar este comando.');
     }
 
-    // Comando %verificar (idêntico ao modelo da foto, com cor #ffe500 e reação de cadeado)
     if (command === 'verificar') {
       const embedVerify = new EmbedBuilder()
         .setColor(0xFFE500)
@@ -613,7 +622,6 @@ client.on('messageCreate', async (message) => {
       const sentMsg = await message.channel.send({ embeds: [embedVerify] });
       await sentMsg.react('🔒').catch(() => {});
       
-      // Salva o ID da mensagem de verificação na base de dados para monitorar as reações
       db.verifyMessageId = sentMsg.id;
       saveDatabase();
       return;
@@ -845,7 +853,6 @@ client.on('messageCreate', async (message) => {
       const robuxEmoji = '<:robux:1553191661545193603>';
       const pixEmoji = '<:pix:1560853388034445485>';
 
-      // Embed atualizado com a logo do servidor e o footer personalizado
       const embed = new EmbedBuilder()
         .setColor(0x2B2D31)
         .setDescription(
@@ -862,9 +869,7 @@ client.on('messageCreate', async (message) => {
         embed.setImage(attachment.url);
       }
 
-      // Mensagem content fora do embed indicando quem baniu
       const banContent = `Banimento registrado por: <@${member.id}>`;
-
       await blacklistChannel.send({ content: banContent, embeds: [embed] });
 
       try {
@@ -1286,8 +1291,8 @@ client.on('messageCreate', async (message) => {
       await targetMember.roles.add(CUP_TIED_ROLE_ID).catch(() => {});
     }
 
-    const teamRole = guild.roles.cache.get(team.roleId);
-    if (teamRole) await targetMember.roles.remove(teamRole);
+    const teamRole = guild.channels.cache.get(team.roleId) || guild.roles.cache.get(team.roleId);
+    if (teamRole && typeof teamRole.members !== 'undefined') await targetMember.roles.remove(teamRole);
     const marketChannel = guild.channels.cache.get(db.marketChannelId);
     const embed = new EmbedBuilder().setColor(0x442604).setTitle('Player Released').setDescription(`<@${targetUser.id}> dispensado de ${team.emoji}`);
     if (marketChannel) await marketChannel.send({ embeds: [embed] });
